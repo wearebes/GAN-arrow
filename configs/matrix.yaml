@@ -1,0 +1,37 @@
+epochs: 18
+image_size: 256
+processed_dir: dataset/generate_data/processed_256_front
+
+defaults:
+  batch_size: 16
+  generator_features: 16
+  discriminator_features: 16
+  min_target_anchor_fraction: 0.06
+  target_crop_expansion: 2.9
+
+experiments:
+  - name: normNone_dlr1e-4_glr2e-4
+    discriminator_norm: none
+    d_lr: 0.0001
+    g_lr: 0.0002
+  - name: normNone_dlr5e-5_glr2e-4
+    discriminator_norm: none
+    d_lr: 0.00005
+    g_lr: 0.0002
+  - name: normInst_dlr5e-5_glr2e-4
+    discriminator_norm: instance
+    d_lr: 0.00005
+    g_lr: 0.0002
+  - name: patchLSGAN_dlr2e-4_glr2e-4
+    discriminator_norm: none
+    discriminator_mode: patch
+    adversarial_loss_mode: lsgan
+    d_lr: 0.0002
+    g_lr: 0.0002
+  - name: patchLSGAN_core_dlr2e-4_glr2e-4
+    discriminator_norm: none
+    discriminator_mode: patch
+    adversarial_loss_mode: lsgan
+    target_crop_expansion: 1.1
+    d_lr: 0.0002
+    g_lr: 0.0002

@@ -1,0 +1,22 @@
+image_size: 256
+processed_dir: dataset/generate_data/processed_256_front
+epochs: 300
+defaults:
+  batch_size: 16
+  generator_mode: upsample
+  generator_features: 64
+  discriminator_features: 64
+  discriminator_norm: none
+  discriminator_mode: global
+  adversarial_loss_mode: bce
+  d_lr: 0.0002
+  g_lr: 0.0002
+  real_label: 0.9
+  diffaugment: true
+  diffaugment_policy: color,translation,cutout
+  ema_decay: 0.999
+  skip_prepare: true
+  min_target_anchor_fraction: 0.06
+  target_crop_expansion: 2.9
+experiments:
+  - name: large256_global_bce_g64d64_diffaug_ema_e300

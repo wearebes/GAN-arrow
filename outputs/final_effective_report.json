@@ -1,0 +1,27 @@
+{
+  "raw_image_count": 109,
+  "usable_front_roi_count_after_auto_heic_stream": 53,
+  "usable_core_roi_count_after_auto_heic_stream": 57,
+  "best_gan": {
+    "name": "256_front_patch_lsgan_e60",
+    "status": "best_gan_but_abstract_not_production",
+    "sample_grid": "outputs/final_front256_patch_lsgan_g16_d16_e60/gan_20260705_024056/samples_epoch_060.png",
+    "metrics": "outputs/final_front256_patch_lsgan_g16_d16_e60/gan_20260705_024056/metrics.json"
+  },
+  "effective_versions": {
+    "procedural_targets_256": {
+      "status": "usable_generated_targets",
+      "grid": "outputs/effective_procedural_targets_256/target_grid.png",
+      "samples_dir": "outputs/effective_procedural_targets_256/samples",
+      "metrics": "outputs/effective_procedural_targets_256/metrics.json"
+    },
+    "augmented_real_roi_256": {
+      "status": "usable_real_roi_augmentations",
+      "grid": "outputs/effective_augmented_256/augmented_grid.png",
+      "samples_dir": "outputs/effective_augmented_256/samples",
+      "metrics": "outputs/effective_augmented_256/metrics.json"
+    }
+  },
+  "experiment_matrix": "outputs/experiment_summary.csv",
+  "gan_failure_analysis": "outputs/gan_failure_analysis.md"
+}
