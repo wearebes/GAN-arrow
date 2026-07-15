@@ -31,6 +31,7 @@ from model.train_gan import (
     should_save_epoch_artifact,
     should_use_amp,
     target_ring_prior_loss,
+    train,
     weights_init,
 )
 
@@ -345,6 +346,22 @@ class GanTrainingConfigTests(unittest.TestCase):
 
             self.assertEqual(prepared_count, 0)
             self.assertEqual(prepared_image_paths(output_dir), [])
+
+    def test_train_reports_empty_preprocess_cache_cause(self):
+        with TemporaryDirectory() as temp_dir:
+            temp_origin = Path(temp_dir) / "origin"
+            temp_origin.mkdir()
+            (temp_origin / "broken.HEIC").write_bytes(b"not a real heic")
+            config = TrainingConfig(
+                dataset_dir=temp_origin,
+                processed_dir=Path(temp_dir) / "processed",
+                output_dir=Path(temp_dir) / "outputs",
+                batch_size=1,
+                epochs=1,
+            )
+
+            with self.assertRaisesRegex(ValueError, "decode_failed=1"):
+                train(config)
 
     def test_prepare_images_keeps_clear_target_subset(self):
         with TemporaryDirectory() as temp_dir:

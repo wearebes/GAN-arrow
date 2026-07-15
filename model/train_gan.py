@@ -389,6 +389,29 @@ def _score_decoded_candidate(path: Path):
 
 
 def _convert_heic_with_ffmpeg(source_path: Path, output_path: Path):
+    try:
+        import pillow_heif
+
+        heif_image = pillow_heif.read_heif(source_path)
+        image = Image.frombytes(heif_image.mode, heif_image.size, heif_image.data, "raw")
+        image.save(output_path, format="PNG")
+        if image_has_signal(output_path):
+            return
+    except (ImportError, RuntimeError, OSError, ValueError):
+        output_path.unlink(missing_ok=True)
+
+    try:
+        subprocess.run(
+            ["heif-convert", str(source_path), str(output_path)],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        if image_has_signal(output_path):
+            return
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+        output_path.unlink(missing_ok=True)
+
     default_temp = output_path.with_name(f"{output_path.stem}.stream_default{PROCESSED_IMAGE_EXTENSION}")
     try:
         _decode_heic_stream(source_path, default_temp, None)
@@ -533,6 +556,7 @@ def prepare_images(
     limit: int | None = None,
     min_target_anchor_fraction: float = 0.01,
     target_crop_expansion: float = 2.9,
+    raise_on_empty: bool = False,
 ) -> int:
     processed_dir.mkdir(parents=True, exist_ok=True)
     version_path = processed_dir / ".preprocess_version"
@@ -550,6 +574,12 @@ def prepare_images(
     if limit is not None:
         source_paths = source_paths[:limit]
 
+    rejected_counts = {
+        "decode_failed": 0,
+        "missing_target_roi": 0,
+        "insufficient_target_anchor": 0,
+    }
+    last_decode_error = None
     for source_path in source_paths:
         output_path = processed_dir / f"{source_path.stem}{PROCESSED_IMAGE_EXTENSION}"
         if (
@@ -567,15 +597,19 @@ def prepare_images(
                 _convert_heic_with_ffmpeg(source_path, output_path)
             else:
                 _convert_with_pillow(source_path, output_path)
-        except RuntimeError:
+        except RuntimeError as exc:
+            rejected_counts["decode_failed"] += 1
+            last_decode_error = exc
             output_path.unlink(missing_ok=True)
             _remove_prepared_cache_for_stem(processed_dir, source_path.stem)
             continue
         if not _crop_target_roi_file(output_path, target_crop_expansion=target_crop_expansion):
+            rejected_counts["missing_target_roi"] += 1
             output_path.unlink(missing_ok=True)
             _remove_prepared_cache_for_stem(processed_dir, source_path.stem)
             continue
         if not image_has_target_anchor(output_path, min_fraction=min_target_anchor_fraction):
+            rejected_counts["insufficient_target_anchor"] += 1
             output_path.unlink(missing_ok=True)
             _remove_prepared_cache_for_stem(processed_dir, source_path.stem)
             continue
@@ -584,6 +618,21 @@ def prepare_images(
         _remove_prepared_cache_for_stem(processed_dir, source_path.stem, keep=output_path)
         prepared_count += 1
     version_path.write_text(preprocess_version)
+    if prepared_count == 0 and raise_on_empty:
+        details = ", ".join(f"{reason}={count}" for reason, count in rejected_counts.items() if count)
+        if not details:
+            details = "no accepted images"
+        message = f"Preprocessing produced no prepared images in {processed_dir} from {source_dir} ({details})"
+        if last_decode_error is not None:
+            message += f"; last decode error: {last_decode_error}"
+        if rejected_counts["decode_failed"] == len(source_paths) and any(
+            path.suffix.lower() in {".heic", ".heif"} for path in source_paths
+        ):
+            message += (
+                "; all HEIC sources failed to decode. Install pillow-heif or libheif-examples "
+                "(heif-convert), or convert the source images to PNG/JPEG before training."
+            )
+        raise ValueError(message)
     return prepared_count
 
 
@@ -888,6 +937,7 @@ def train(config: TrainingConfig):
             config.image_size,
             min_target_anchor_fraction=config.min_target_anchor_fraction,
             target_crop_expansion=config.target_crop_expansion,
+            raise_on_empty=True,
         )
     dataset = ArrowImageDataset(config.processed_dir, config.image_size)
     dataloader = DataLoader(
@@ -1185,6 +1235,7 @@ def parse_args():
     parser.add_argument("--min-target-anchor-fraction", type=float, default=None)
     parser.add_argument("--target-crop-expansion", type=float, default=None)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--workers", type=int, default=None)
     return parser.parse_args()
 
 
@@ -1252,6 +1303,8 @@ def main():
         overrides["min_target_anchor_fraction"] = args.min_target_anchor_fraction
     if args.target_crop_expansion is not None:
         overrides["target_crop_expansion"] = args.target_crop_expansion
+    if args.workers is not None:
+        overrides["workers"] = args.workers
     config = TrainingConfig.from_dataset_size(dataset_size, **overrides)
     metrics = train(config)
     print(json.dumps(metrics, indent=2))

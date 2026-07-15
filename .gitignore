@@ -3,3 +3,30 @@
 .pytest_cache/
 __pycache__/
 *.py[cod]
+# Local datasets and generated image caches
+dataset/origin_data/
+dataset/generate_data/
+
+# Large model artifacts
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.h5
+
+# Generated media
+*.png
+*.jpg
+*.jpeg
+*.heic
+*.HEIC
+*.gif
+
+# Keep only lightweight, reproducible experiment summaries
+outputs/*
+!outputs/experiment_summary.csv
+!outputs/experiments_log.md
+!outputs/final_effective_report.json
+!outputs/gan_failure_analysis.md
+!outputs/score_real_256_front.csv
+!outputs/scorer_calibration.md
