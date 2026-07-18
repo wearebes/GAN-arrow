@@ -1,0 +1,6 @@
+# Validation prompts. [0] = training instance prompt; [3] tests class drift; [4] tests prior intactness.
+a photo of zqx archery target on a stand outdoors
+a photo of zqx archery target, frontal view, arrows stuck in the target face
+a photo of zqx archery target seen from the side, outdoors
+a photo of an archery target outdoors
+a photo of a golden retriever in a park

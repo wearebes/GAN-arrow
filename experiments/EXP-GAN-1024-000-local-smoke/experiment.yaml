@@ -1,0 +1,65 @@
+schema_version: 1
+id: EXP-GAN-1024-000-local-smoke
+kind: smoke
+hypothesis: One real CPU forward/backward step through the exact 1024 px G48/D16 pipeline.
+spec:
+  ada_augpipe: bgc
+  ada_interval: 4
+  ada_kimg: 500.0
+  ada_p_initial: 0.0
+  ada_target: 0.6
+  amp: false
+  augmentation_mode: diffaugment
+  batch_size: 1
+  beta1: 0.5
+  channels: 3
+  checkpoint_interval: 1
+  d_lr: 0.0001
+  dataset_dir: dataset/origin_data
+  diffaugment: true
+  diffaugment_policy: color,translation,cutout
+  discriminator_features: 16
+  early_stop_min_delta: 0.0
+  early_stop_min_epochs: 0
+  early_stop_patience_evals: 0
+  ema_decay: 0.995
+  epochs: 1
+  g_lr: 0.0002
+  generator_features: 48
+  grad_accum_steps: 1
+  image_size: 1024
+  latent_dim: 100
+  max_steps: 1
+  min_target_anchor_fraction: 0.01
+  processed_dir: dataset/generate_data/processed_1024_front
+  real_label: 0.9
+  sample_interval: 1
+  seed: 42
+  skip_prepare: true
+  target_crop_expansion: 2.9
+  workers: 0
+tracking:
+  mode: offline
+  project: gan-arrow
+  group: gan-1024
+  swanlab_id: null
+  swanlab_url: null
+  note: migrated run; predates tracking integration
+run:
+  status: completed
+  started_at: null
+  finished_at: 2026-07-15T21:18:23+0800
+  completed_epoch: 1
+  completed_steps: 1
+  device: cpu
+  git_commit: 8b6d1522467ee08c541148df3f2b1e9d2c7565be
+  spec_sha256: 3563579159c8cadb450768f9e992acee46f4a662b57f954801a1f5db9e6bc165
+  error: null
+result:
+  loss_d: 0.6931077837944031
+  loss_g: 0.6931445598602295
+  d_real: 0.500053346157074
+  d_fake: 0.5000032782554626
+  inference_source: null
+  judgment: Pipeline smoke only; ran 25.17 s on CPU. Not a model-quality result.
+artifacts: {}

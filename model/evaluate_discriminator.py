@@ -4,11 +4,11 @@ from pathlib import Path
 
 import torch
 import torchvision.transforms as transforms
-from PIL import Image
+from PIL import Image, ImageDraw, ImageOps
 from torch.utils.data import DataLoader, Dataset
 
 from model.generate_samples import load_generator
-from model.train_gan import Discriminator, PatchDiscriminator, prepared_image_paths, select_device
+from model.train_gan import Discriminator, prepared_image_paths, select_device
 
 
 PREPARED_IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg")
@@ -48,6 +48,62 @@ def summarize_probabilities(probabilities, fake_expected: bool):
     }
 
 
+def summarize_classification(real_summary, fake_summary):
+    real_accuracy = real_summary["accuracy_at_0_5"]
+    fake_accuracy = fake_summary["accuracy_at_0_5"]
+    return {
+        "threshold": 0.5,
+        "real_accuracy": real_accuracy,
+        "fake_accuracy": fake_accuracy,
+        "balanced_accuracy": (real_accuracy + fake_accuracy) * 0.5,
+        "interpretation": "balanced accuracy gives equal weight to real and generated groups",
+    }
+
+
+def classify_predictions(paths, probabilities, expected_label: str):
+    if expected_label not in {"real", "fake"}:
+        raise ValueError("expected_label must be 'real' or 'fake'")
+    records = []
+    for path, probability in zip(paths, probabilities):
+        predicted_label = "real" if probability >= 0.5 else "fake"
+        records.append(
+            {
+                "path": str(path),
+                "expected_label": expected_label,
+                "predicted_label": predicted_label,
+                "p_real": float(probability),
+                "correct": predicted_label == expected_label,
+            }
+        )
+    return records
+
+
+def save_prediction_contact_sheet(records, output_path: Path, *, correct: bool, columns=4, cell_size=256):
+    selected = [record for record in records if record["correct"] is correct and Path(record["path"]).exists()]
+    if not selected:
+        return None
+    label_height = 42
+    rows = (len(selected) + columns - 1) // columns
+    sheet = Image.new("RGB", (columns * cell_size, rows * (cell_size + label_height)), "white")
+    draw = ImageDraw.Draw(sheet)
+    for index, record in enumerate(selected):
+        row, column = divmod(index, columns)
+        x = column * cell_size
+        y = row * (cell_size + label_height)
+        with Image.open(record["path"]) as image:
+            thumbnail = ImageOps.fit(image.convert("RGB"), (cell_size, cell_size))
+        sheet.paste(thumbnail, (x, y))
+        name = Path(record["path"]).name
+        label = (
+            f"{name[:24]}  P(real)={record['p_real']:.3f}\n"
+            f"{record['expected_label']} -> {record['predicted_label']}"
+        )
+        draw.text((x + 4, y + cell_size + 3), label, fill="black")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    sheet.save(output_path)
+    return output_path
+
+
 class ImagePathDataset(Dataset):
     def __init__(self, paths, image_size: int):
         self.paths = list(paths)
@@ -84,8 +140,6 @@ def _checkpoint_config(metrics_path: Path | None, args):
             "image_size": args.image_size,
             "channels": args.channels,
             "discriminator_features": args.discriminator_features,
-            "discriminator_norm": args.discriminator_norm,
-            "discriminator_mode": args.discriminator_mode,
         }
     metrics = json.loads(metrics_path.read_text())
     config = metrics.get("config", {})
@@ -93,26 +147,15 @@ def _checkpoint_config(metrics_path: Path | None, args):
         "image_size": int(config.get("image_size", args.image_size)),
         "channels": int(config.get("channels", args.channels)),
         "discriminator_features": int(config.get("discriminator_features", args.discriminator_features)),
-        "discriminator_norm": config.get("discriminator_norm", args.discriminator_norm),
-        "discriminator_mode": config.get("discriminator_mode", args.discriminator_mode),
     }
 
 
 def load_discriminator(checkpoint_path: Path, config: dict, device):
-    if config["discriminator_mode"] == "patch":
-        discriminator = PatchDiscriminator(
-            image_size=config["image_size"],
-            channels=config["channels"],
-            features=config["discriminator_features"],
-            norm=config["discriminator_norm"],
-        )
-    else:
-        discriminator = Discriminator(
-            image_size=config["image_size"],
-            channels=config["channels"],
-            features=config["discriminator_features"],
-            norm=config["discriminator_norm"],
-        )
+    discriminator = Discriminator(
+        image_size=config["image_size"],
+        channels=config["channels"],
+        features=config["discriminator_features"],
+    )
     discriminator.load_state_dict(torch.load(checkpoint_path, map_location=device, weights_only=False))
     discriminator.to(device)
     discriminator.eval()
@@ -162,6 +205,7 @@ def evaluate_discriminator(
     num_fresh=64,
     seed=42,
     batch_size=16,
+    review_dir: Path | None = None,
     args=None,
 ):
     device = select_device()
@@ -177,11 +221,18 @@ def evaluate_discriminator(
         real_paths = prepared_image_paths(real_dir)
         real_probabilities = evaluate_image_paths(discriminator, real_paths, config["image_size"], device, batch_size)
         result["real"] = summarize_probabilities(real_probabilities, fake_expected=False)
+        result["real"]["items"] = classify_predictions(real_paths, real_probabilities, expected_label="real")
     if generated_dir is not None:
+        generated_paths = image_paths(generated_dir)
         generated_probabilities = evaluate_image_paths(
-            discriminator, image_paths(generated_dir), config["image_size"], device, batch_size
+            discriminator, generated_paths, config["image_size"], device, batch_size
         )
         result["generated_saved"] = summarize_probabilities(generated_probabilities, fake_expected=True)
+        result["generated_saved"]["items"] = classify_predictions(
+            generated_paths, generated_probabilities, expected_label="fake"
+        )
+    if "real" in result and "generated_saved" in result:
+        result["classification_summary"] = summarize_classification(result["real"], result["generated_saved"])
     if generator_checkpoint is not None and num_fresh > 0:
         fresh_probabilities = evaluate_fresh_generator(
             discriminator,
@@ -192,6 +243,25 @@ def evaluate_discriminator(
             batch_size=batch_size,
         )
         result["generated_fresh"] = summarize_probabilities(fresh_probabilities, fake_expected=True)
+    if review_dir is None:
+        review_dir = output_path.with_suffix("").with_name(f"{output_path.stem}_review")
+    review_artifacts = {}
+    review_groups = [
+        ("real", True, "real_as_real"),
+        ("real", False, "real_as_fake"),
+        ("generated_saved", True, "fake_as_fake"),
+        ("generated_saved", False, "fake_as_real"),
+    ]
+    for source_group, correct, review_name in review_groups:
+        if source_group not in result:
+            continue
+        artifact = save_prediction_contact_sheet(
+            result[source_group]["items"],
+            review_dir / f"{review_name}.png",
+            correct=correct,
+        )
+        review_artifacts[review_name] = str(artifact) if artifact is not None else None
+    result["review_artifacts"] = review_artifacts
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(result, indent=2))
     return result
@@ -207,12 +277,11 @@ def parse_args():
     parser.add_argument("--num-fresh", type=int, default=64)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--review-dir", type=Path, default=None)
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--image-size", type=int, default=256)
     parser.add_argument("--channels", type=int, default=3)
     parser.add_argument("--discriminator-features", type=int, default=32)
-    parser.add_argument("--discriminator-norm", choices=["none", "instance", "batch"], default="none")
-    parser.add_argument("--discriminator-mode", choices=["global", "patch"], default="global")
     return parser.parse_args()
 
 
@@ -228,6 +297,7 @@ def main():
         num_fresh=args.num_fresh,
         seed=args.seed,
         batch_size=args.batch_size,
+        review_dir=args.review_dir,
         args=args,
     )
     print(json.dumps(result, indent=2))

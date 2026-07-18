@@ -1,0 +1,65 @@
+schema_version: 1
+id: EXP-GAN-1024-021-mps-throughput
+kind: probe
+hypothesis: Measure sustained 1024 px Apple MPS throughput over eight batches.
+spec:
+  ada_augpipe: bgc
+  ada_interval: 4
+  ada_kimg: 500.0
+  ada_p_initial: 0.0
+  ada_target: 0.6
+  amp: false
+  augmentation_mode: diffaugment
+  batch_size: 1
+  beta1: 0.5
+  channels: 3
+  checkpoint_interval: 1
+  d_lr: 0.0001
+  dataset_dir: dataset/origin_data
+  diffaugment: true
+  diffaugment_policy: color,translation,cutout
+  discriminator_features: 16
+  early_stop_min_delta: 0.0
+  early_stop_min_epochs: 0
+  early_stop_patience_evals: 0
+  ema_decay: 0.995
+  epochs: 1
+  g_lr: 0.0002
+  generator_features: 48
+  grad_accum_steps: 8
+  image_size: 1024
+  latent_dim: 100
+  max_steps: 8
+  min_target_anchor_fraction: 0.01
+  processed_dir: dataset/generate_data/processed_1024_front
+  real_label: 0.9
+  sample_interval: 1
+  seed: 42
+  skip_prepare: true
+  target_crop_expansion: 2.9
+  workers: 0
+tracking:
+  mode: offline
+  project: gan-arrow
+  group: gan-1024
+  swanlab_id: null
+  swanlab_url: null
+  note: migrated run; predates tracking integration
+run:
+  status: completed
+  started_at: null
+  finished_at: 2026-07-15T21:40:56+0800
+  completed_epoch: 1
+  completed_steps: 8
+  device: mps
+  git_commit: 8b6d1522467ee08c541148df3f2b1e9d2c7565be
+  spec_sha256: 1e1bfbbe5ae6127d0221fb2aa9e7812187ecd9339180467929360ac5534d375b
+  error: null
+result:
+  loss_d: 0.6931281313300133
+  loss_g: 0.6931820139288902
+  d_real: 0.4999989792704582
+  d_fake: 0.4999801367521286
+  inference_source: null
+  judgment: Device throughput only.
+artifacts: {}

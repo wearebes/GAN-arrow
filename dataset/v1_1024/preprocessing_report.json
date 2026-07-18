@@ -1,0 +1,50 @@
+{
+  "dataset_version": "v1_1024",
+  "source_dir": "dataset/origin_data",
+  "output_dir": "dataset/v1_1024",
+  "source_count": 109,
+  "accepted_count": 100,
+  "rejected_count": 9,
+  "rejected_sources": [
+    "dataset/origin_data/IMG_4024.HEIC",
+    "dataset/origin_data/IMG_4035.HEIC",
+    "dataset/origin_data/IMG_4046.HEIC",
+    "dataset/origin_data/IMG_4057.HEIC",
+    "dataset/origin_data/IMG_4068.HEIC",
+    "dataset/origin_data/IMG_4079.HEIC",
+    "dataset/origin_data/IMG_4090.HEIC",
+    "dataset/origin_data/IMG_4101.HEIC",
+    "dataset/origin_data/IMG_4112.HEIC"
+  ],
+  "split_counts": {
+    "train": 80,
+    "val": 0,
+    "test": 20
+  },
+  "split_unit": "contiguous filename capture groups",
+  "capture_group_size": 5,
+  "seed": 42,
+  "image_size": 1024,
+  "preprocess_version": "target_roi_v5_centered_target_gate",
+  "random_offline_augmentation": false,
+  "candidate_staging_preprocessing": {
+    "preprocess_version": "target_roi_v4_exact_training_resolution:min_anchor_fraction=0.0100:crop_expansion=2.9000:min_resolution=1024",
+    "source_count": 109,
+    "candidate_accepted_count": 101,
+    "candidate_rejected_count": 8,
+    "note": "Candidate staging is provenance only, not the final acceptance result. Every staged image was revalidated with the current preprocess_version before splitting."
+  },
+  "validation": {
+    "passed": true,
+    "manifest_rows": 100,
+    "split_counts": {
+      "train": 80,
+      "val": 0,
+      "test": 20
+    },
+    "unique_sources": 100,
+    "unique_prepared_files": 100,
+    "capture_groups": 20,
+    "errors": []
+  }
+}

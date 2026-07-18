@@ -1,0 +1,68 @@
+schema_version: 1
+id: EXP-GAN-1024-001-base
+kind: formal
+hypothesis: A conservative baseline should establish whether the compact model can
+  learn target structure without immediate instability.
+spec:
+  ada_augpipe: bgc
+  ada_interval: 4
+  ada_kimg: 500.0
+  ada_p_initial: 0.0
+  ada_target: 0.6
+  amp: true
+  augmentation_mode: diffaugment
+  batch_size: 1
+  beta1: 0.5
+  channels: 3
+  checkpoint_interval: 5
+  d_lr: 0.0001
+  dataset_dir: dataset/origin_data
+  diffaugment: true
+  diffaugment_policy: color,translation,cutout
+  discriminator_features: 16
+  early_stop_min_delta: 0.005
+  early_stop_min_epochs: 20
+  early_stop_patience_evals: 3
+  ema_decay: 0.995
+  epochs: 25
+  g_lr: 0.0002
+  generator_features: 48
+  grad_accum_steps: 16
+  image_size: 1024
+  latent_dim: 100
+  max_steps: null
+  min_target_anchor_fraction: 0.01
+  processed_dir: dataset/generate_data/processed_1024_front
+  real_label: 0.9
+  sample_interval: 5
+  seed: 42
+  skip_prepare: false
+  target_crop_expansion: 2.9
+  workers: 0
+tracking:
+  mode: offline
+  project: gan-arrow
+  group: gan-1024
+  swanlab_id: null
+  swanlab_url: null
+  note: migrated run; predates tracking integration
+run:
+  status: completed
+  started_at: null
+  finished_at: 2026-07-15T21:43:08+0800
+  completed_epoch: 20
+  completed_steps: 2020
+  device: mps
+  git_commit: 8b6d1522467ee08c541148df3f2b1e9d2c7565be
+  spec_sha256: 8ea3e4936acb213f625157fb87589457bcf6ea20571c4ba6610a4c6438cedce9
+  error: null
+result:
+  loss_d: 0.5216236613174476
+  loss_g: 1.4225167204247844
+  d_real: 0.647778747845349
+  d_fake: 0.30405800928936444
+  inference_source: best_ema_snapshot (early stop, unique; not reproducible from resume.pt)
+  judgment: Early stop at epoch 20. Numerically finite but the discriminator leads
+    the generator; no recognizable target or arrow shape. Final discriminator balanced
+    accuracy 98.02%.
+artifacts: {}

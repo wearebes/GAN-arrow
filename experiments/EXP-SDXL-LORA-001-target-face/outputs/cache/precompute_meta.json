@@ -1,0 +1,10 @@
+{
+  "model": "stabilityai/stable-diffusion-xl-base-1.0",
+  "prompt": "a photo of zqx archery target on a stand outdoors",
+  "resolutions": "768,1024",
+  "prompt_embeds_shape": [
+    1,
+    77,
+    2048
+  ]
+}

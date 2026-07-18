@@ -1,0 +1,1204 @@
+{
+  "checkpoint": "experiments/EXP-GAN-1024-001-base/discriminator.pt",
+  "device": "mps",
+  "meaning": "probabilities are sigmoid(D output), i.e. P(real) according to discriminator",
+  "config": {
+    "image_size": 1024,
+    "channels": 3,
+    "discriminator_features": 16
+  },
+  "real": {
+    "count": 101,
+    "mean_p_real": 0.9005089250605295,
+    "median_p_real": 0.9351642727851868,
+    "min_p_real": 0.061753977090120316,
+    "q25_p_real": 0.9083190560340881,
+    "q75_p_real": 0.9466872215270996,
+    "max_p_real": 0.959172248840332,
+    "correct_at_0_5": 97,
+    "accuracy_at_0_5": 0.9603960396039604,
+    "items": [
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4014.png",
+        "expected_label": "real",
+        "predicted_label": "fake",
+        "p_real": 0.4492453634738922,
+        "correct": false
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4015.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9313976764678955,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4016.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9092756509780884,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4017.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9456988573074341,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4018.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9016619920730591,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4019.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9138432145118713,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4020.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9303992390632629,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4021.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9378324151039124,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4022.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9083190560340881,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4023.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9189308285713196,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4025.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.873626708984375,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4026.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9224303960800171,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4027.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9405282139778137,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4028.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9357145428657532,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4029.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.8651834726333618,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4030.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9309839010238647,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4031.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9271894097328186,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4032.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9425921440124512,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4033.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.8425013422966003,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4034.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9375959634780884,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4036.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.944514274597168,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4037.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9352074861526489,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4038.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9431209564208984,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4039.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9408332705497742,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4040.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.8797845244407654,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4041.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9435662627220154,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4042.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9169023036956787,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4043.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9351642727851868,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4044.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.858581006526947,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4045.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9375994205474854,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4047.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.863919734954834,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4048.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9454381465911865,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4049.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9162980914115906,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4050.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9416186809539795,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4051.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.8448612689971924,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4052.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.945530116558075,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4053.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.8561823964118958,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4054.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9482543468475342,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4055.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9247593879699707,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4056.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9480203986167908,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4058.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.900865375995636,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4059.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9516262412071228,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4060.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.8867701292037964,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4061.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9338257312774658,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4062.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9146814942359924,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4063.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9418498277664185,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4064.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.923801064491272,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4065.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9500069618225098,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4066.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9240041971206665,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4067.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9474667310714722,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4069.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9243983626365662,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4070.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9480749368667603,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4071.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.8879926204681396,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4072.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9503622651100159,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4073.png",
+        "expected_label": "real",
+        "predicted_label": "fake",
+        "p_real": 0.43242061138153076,
+        "correct": false
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4074.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9575279951095581,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4075.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.8642632365226746,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4076.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9491487741470337,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4077.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9312039017677307,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4078.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9290394186973572,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4080.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9047113060951233,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4081.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9544044137001038,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4082.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.8876668810844421,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4083.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.959172248840332,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4084.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.8970316052436829,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4085.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9527143836021423,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4086.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9428327083587646,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4087.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9516586065292358,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4088.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9120330214500427,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4089.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.953281581401825,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4090.png",
+        "expected_label": "real",
+        "predicted_label": "fake",
+        "p_real": 0.061753977090120316,
+        "correct": false
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4091.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.8758546113967896,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4092.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9478095173835754,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4093.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9346537590026855,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4094.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9561786651611328,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4095.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.911102294921875,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4096.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9550634622573853,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4097.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9128589630126953,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4098.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9395075440406799,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4099.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.8770664930343628,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4100.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9486402869224548,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4102.png",
+        "expected_label": "real",
+        "predicted_label": "fake",
+        "p_real": 0.335044801235199,
+        "correct": false
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4103.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.949327826499939,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4104.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9366781115531921,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4105.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9364184737205505,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4106.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9481192231178284,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4107.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9474155902862549,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4108.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.913391649723053,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4109.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9372115731239319,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4110.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.874828040599823,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4111.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.95071941614151,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4113.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.8836541771888733,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4114.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9512562155723572,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4115.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9423697590827942,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4116.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9437333345413208,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4117.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.930387556552887,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4118.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9473769664764404,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4119.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9397459030151367,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4120.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9479480981826782,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4121.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.8686545491218567,
+        "correct": true
+      },
+      {
+        "path": "dataset/generate_data/processed_1024_front/IMG_4122.png",
+        "expected_label": "real",
+        "predicted_label": "real",
+        "p_real": 0.9466872215270996,
+        "correct": true
+      }
+    ]
+  },
+  "generated_saved": {
+    "count": 64,
+    "mean_p_real": 0.0018889992552431067,
+    "median_p_real": 0.001853661029599607,
+    "min_p_real": 0.0014245645143091679,
+    "q25_p_real": 0.0016939683991950005,
+    "q75_p_real": 0.002033405064139515,
+    "max_p_real": 0.0027853052597492933,
+    "correct_at_0_5": 64,
+    "accuracy_at_0_5": 1.0,
+    "items": [
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_001.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0018480485305190086,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_002.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0016589752631261945,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_003.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.001651367056183517,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_004.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.001741449348628521,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_005.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0015343211125582457,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_006.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0020875250920653343,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_007.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.001669274759478867,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_008.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0017352616414427757,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_009.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0022808935027569532,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_010.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0017961900448426604,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_011.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0017221317393705249,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_012.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0020072695333510637,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_013.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0014245645143091679,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_014.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0016980059444904327,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_015.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0016027626115828753,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_016.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0019224899588152766,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_017.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0017248251242563128,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_018.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0021145963110029697,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_019.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0016643306007608771,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_020.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.001648656907491386,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_021.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0017449096776545048,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_022.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.002468677004799247,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_023.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.001972394995391369,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_024.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0020319120958447456,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_025.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0019878149032592773,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_026.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0019405861385166645,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_027.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0021282793022692204,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_028.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0015269482973963022,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_029.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0021693974267691374,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_030.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0016593261389061809,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_031.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.001681855763308704,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_032.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0022720289416611195,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_033.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.001962334616109729,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_034.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0018410104094073176,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_035.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0022232767660170794,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_036.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.00229048659093678,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_037.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0015026988694444299,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_038.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0019534260500222445,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_039.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.002310291863977909,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_040.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.001681678812019527,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_041.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0024295938201248646,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_042.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0017813413869589567,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_043.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.002066487679257989,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_044.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0019247190793976188,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_045.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0014716335572302341,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_046.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0017682001926004887,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_047.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0019024123903363943,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_048.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0019337419653311372,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_049.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0019832858815789223,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_050.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0019121860386803746,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_051.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0015614236472174525,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_052.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0018246805993840098,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_053.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0020133338402956724,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_054.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0018592735286802053,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_055.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0015822078566998243,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_056.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0017701057950034738,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_057.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0021319936495274305,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_058.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.00171500479336828,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_059.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.002103866543620825,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_060.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0019488324178382754,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_061.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0020378839690238237,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_062.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0017166252946481109,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_063.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0027853052597492933,
+        "correct": true
+      },
+      {
+        "path": "experiments/EXP-GAN-1024-001-base/generated_final/samples/sample_064.png",
+        "expected_label": "fake",
+        "predicted_label": "fake",
+        "p_real": 0.0017895388882607222,
+        "correct": true
+      }
+    ]
+  },
+  "classification_summary": {
+    "threshold": 0.5,
+    "real_accuracy": 0.9603960396039604,
+    "fake_accuracy": 1.0,
+    "balanced_accuracy": 0.9801980198019802,
+    "interpretation": "balanced accuracy gives equal weight to real and generated groups"
+  },
+  "review_artifacts": {
+    "real_as_real": "experiments/EXP-GAN-1024-001-base/discriminator_final_review/real_as_real.png",
+    "real_as_fake": "experiments/EXP-GAN-1024-001-base/discriminator_final_review/real_as_fake.png",
+    "fake_as_fake": "experiments/EXP-GAN-1024-001-base/discriminator_final_review/fake_as_fake.png",
+    "fake_as_real": null
+  }
+}

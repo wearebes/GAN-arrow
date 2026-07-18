@@ -1,0 +1,70 @@
+schema_version: 1
+id: EXP-GAN-1024-005-g5e4-long500
+kind: formal
+hypothesis: Increasing only the generator learning rate to 5e-4 may improve target
+  and arrow detail.
+spec:
+  ada_augpipe: bgc
+  ada_interval: 4
+  ada_kimg: 500.0
+  ada_p_initial: 0.0
+  ada_target: 0.6
+  amp: true
+  augmentation_mode: diffaugment
+  batch_size: 1
+  beta1: 0.5
+  channels: 3
+  checkpoint_interval: 25
+  d_lr: 0.0001
+  dataset_dir: dataset/origin_data
+  diffaugment: true
+  diffaugment_policy: color,translation,cutout
+  discriminator_features: 16
+  early_stop_min_delta: 0.0
+  early_stop_min_epochs: 0
+  early_stop_patience_evals: 0
+  ema_decay: 0.995
+  epochs: 500
+  g_lr: 0.0005
+  generator_features: 48
+  grad_accum_steps: 16
+  image_size: 1024
+  latent_dim: 100
+  max_steps: null
+  min_target_anchor_fraction: 0.01
+  processed_dir: dataset/generate_data/processed_1024_front_clean
+  real_label: 0.9
+  sample_interval: 10
+  seed: 42
+  skip_prepare: true
+  target_crop_expansion: 2.9
+  workers: 0
+tracking:
+  mode: offline
+  project: gan-arrow
+  group: gan-1024
+  swanlab_id: null
+  swanlab_url: null
+  note: migrated run; predates tracking integration
+run:
+  status: completed
+  started_at: null
+  finished_at: 2026-07-16T00:23:44+0800
+  completed_epoch: 500
+  completed_steps: 50000
+  device: mps
+  git_commit: 8b6d1522467ee08c541148df3f2b1e9d2c7565be
+  spec_sha256: 92cda816f0c1b014107d21fdc9c94c954b53a38743e45d8dec1c8ec1e7fb6ff7
+  error: null
+result:
+  loss_d: 0.28369654417037965
+  loss_g: 2.519623172879219
+  d_real: 0.8440770082175731
+  d_fake: 0.12852134804241358
+  inference_source: final_ema_epoch_500 (best/final/EMA are identical; not an independently
+    validated best)
+  judgment: Improves coarse target recognition over the 100-epoch baseline but does
+    not meet the arrow/detail requirement. D separation widens and G loss rises near
+    the end; further continuation with this configuration is not justified. Do not
+    use this generator to create downstream ring-scoring training data.
+artifacts: {}

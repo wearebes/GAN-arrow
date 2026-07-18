@@ -1,0 +1,90 @@
+{
+  "dataset_size": 109,
+  "prepared_count": 101,
+  "completed_steps": 8,
+  "stopped_early": false,
+  "completed_epochs": 1,
+  "device": "mps",
+  "config": {
+    "dataset_dir": "dataset/origin_data",
+    "processed_dir": "dataset/generate_data/processed_1024_front",
+    "output_dir": "experiments/EXP-GAN-1024-021-mps-throughput",
+    "image_size": 1024,
+    "latent_dim": 100,
+    "channels": 3,
+    "batch_size": 1,
+    "epochs": 1,
+    "d_lr": 0.0001,
+    "g_lr": 0.0002,
+    "beta1": 0.5,
+    "real_label": 0.9,
+    "generator_features": 48,
+    "discriminator_features": 16,
+    "diffaugment": true,
+    "diffaugment_policy": "color,translation,cutout",
+    "ema_decay": 0.995,
+    "amp": false,
+    "grad_accum_steps": 8,
+    "sample_interval": 1,
+    "checkpoint_interval": 1,
+    "early_stop_patience_evals": 0,
+    "early_stop_min_epochs": 0,
+    "early_stop_min_delta": 0.0,
+    "skip_prepare": true,
+    "max_steps": 8,
+    "resume_generator": null,
+    "resume_discriminator": null,
+    "resume_ema_generator": null,
+    "resume_training_state": null,
+    "min_target_anchor_fraction": 0.01,
+    "target_crop_expansion": 2.9,
+    "seed": 42,
+    "workers": 0
+  },
+  "parameter_counts": {
+    "generator": 1592208,
+    "discriminator": 1223424,
+    "total": 2815632
+  },
+  "final": {
+    "loss_d": 0.6931281313300133,
+    "loss_d_total": 1.3862562626600266,
+    "loss_d_real": 0.6931487917900085,
+    "loss_d_fake": 0.6931074634194374,
+    "loss_g": 0.6931820139288902,
+    "d_real": 0.4999989792704582,
+    "d_fake": 0.4999801367521286,
+    "loss_d_over_loss_g": 0.9999222677481611,
+    "stability_judgment": "discriminator_too_weak"
+  },
+  "diagnostics": {
+    "tail_window": 1,
+    "tail_loss_d": 0.6931281313300133,
+    "tail_loss_g": 0.6931820139288902,
+    "tail_d_real": 0.4999989792704582,
+    "tail_d_fake": 0.4999801367521286,
+    "tail_loss_d_over_loss_g": 0.9999222677481611,
+    "stability_judgment": "discriminator_too_weak"
+  },
+  "early_stopping": {
+    "enabled": false,
+    "monitor": "fixed_noise_target_structure_error",
+    "best_value": null,
+    "stale_evaluations": 0,
+    "evaluations": []
+  },
+  "artifacts": {
+    "run_dir": "experiments/EXP-GAN-1024-021-mps-throughput",
+    "best_generator": "experiments/EXP-GAN-1024-021-mps-throughput/best_generator.pt",
+    "best_discriminator": "experiments/EXP-GAN-1024-021-mps-throughput/best_discriminator.pt",
+    "generator_ema": "experiments/EXP-GAN-1024-021-mps-throughput/generator_ema.pt",
+    "training_state": "experiments/EXP-GAN-1024-021-mps-throughput/training_state.pt",
+    "training_state_latest": "experiments/EXP-GAN-1024-021-mps-throughput/training_state_latest.pt",
+    "loss_curve": "experiments/EXP-GAN-1024-021-mps-throughput/loss_curve.png",
+    "history_csv": "experiments/EXP-GAN-1024-021-mps-throughput/history.csv",
+    "last_samples": "experiments/EXP-GAN-1024-021-mps-throughput/samples_epoch_001.png",
+    "checkpoint_candidates": [
+      "experiments/EXP-GAN-1024-021-mps-throughput/training_state_epoch_001.pt"
+    ]
+  }
+}
