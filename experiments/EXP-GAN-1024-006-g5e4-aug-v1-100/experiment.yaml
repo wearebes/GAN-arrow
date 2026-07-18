@@ -1,0 +1,66 @@
+schema_version: 1
+id: EXP-GAN-1024-006-g5e4-aug-v1-100
+kind: formal
+hypothesis: A separate offline augmentation dataset (500 images x 100 epochs) may
+  improve detail at equal image exposures versus the 005 control.
+spec:
+  ada_augpipe: bgc
+  ada_interval: 4
+  ada_kimg: 500.0
+  ada_p_initial: 0.0
+  ada_target: 0.6
+  amp: true
+  augmentation_mode: diffaugment
+  batch_size: 1
+  beta1: 0.5
+  channels: 3
+  checkpoint_interval: 10
+  d_lr: 0.0001
+  dataset_dir: dataset/origin_data
+  diffaugment: true
+  diffaugment_policy: color,translation,cutout
+  discriminator_features: 16
+  early_stop_min_delta: 0.0
+  early_stop_min_epochs: 0
+  early_stop_patience_evals: 0
+  ema_decay: 0.995
+  epochs: 100
+  g_lr: 0.0005
+  generator_features: 48
+  grad_accum_steps: 16
+  image_size: 1024
+  latent_dim: 100
+  max_steps: null
+  min_target_anchor_fraction: 0.01
+  processed_dir: dataset/generate_data/processed_1024_front_aug_v1
+  real_label: 0.9
+  sample_interval: 10
+  seed: 42
+  skip_prepare: true
+  target_crop_expansion: 2.9
+  workers: 0
+tracking:
+  mode: offline
+  project: gan-arrow
+  group: gan-1024
+  swanlab_id: null
+  swanlab_url: null
+  note: migrated run; predates tracking integration
+run:
+  status: planned
+  started_at: null
+  finished_at: null
+  completed_epoch: 0
+  completed_steps: 0
+  device: null
+  git_commit: null
+  spec_sha256: null
+  error: null
+result:
+  loss_d: null
+  loss_g: null
+  d_real: null
+  d_fake: null
+  inference_source: null
+  judgment: null
+artifacts: {}

@@ -1,0 +1,66 @@
+schema_version: 1
+id: EXP-GAN-1024-011-lrprobe-mid
+kind: probe
+hypothesis: Four-step local learning-rate probe at the mid learning rate with EMA
+  disabled.
+spec:
+  ada_augpipe: bgc
+  ada_interval: 4
+  ada_kimg: 500.0
+  ada_p_initial: 0.0
+  ada_target: 0.6
+  amp: false
+  augmentation_mode: diffaugment
+  batch_size: 1
+  beta1: 0.5
+  channels: 3
+  checkpoint_interval: 1
+  d_lr: 0.0001
+  dataset_dir: dataset/origin_data
+  diffaugment: true
+  diffaugment_policy: color,translation,cutout
+  discriminator_features: 16
+  early_stop_min_delta: 0.0
+  early_stop_min_epochs: 0
+  early_stop_patience_evals: 0
+  ema_decay: 0.0
+  epochs: 1
+  g_lr: 0.0005
+  generator_features: 48
+  grad_accum_steps: 1
+  image_size: 1024
+  latent_dim: 100
+  max_steps: 4
+  min_target_anchor_fraction: 0.01
+  processed_dir: dataset/generate_data/processed_1024_front
+  real_label: 0.9
+  sample_interval: 1
+  seed: 42
+  skip_prepare: true
+  target_crop_expansion: 2.9
+  workers: 0
+tracking:
+  mode: offline
+  project: gan-arrow
+  group: gan-1024
+  swanlab_id: null
+  swanlab_url: null
+  note: migrated run; predates tracking integration
+run:
+  status: completed
+  started_at: null
+  finished_at: 2026-07-15T21:27:13+0800
+  completed_epoch: 1
+  completed_steps: 4
+  device: cpu
+  git_commit: 8b6d1522467ee08c541148df3f2b1e9d2c7565be
+  spec_sha256: 9c2fdf2a2005d330149e95e369e5b99f49c6642ba11aa614a9386f5da600c920
+  error: null
+result:
+  loss_d: 0.693022295832634
+  loss_g: 0.6930304616689682
+  d_real: 0.5002667754888535
+  d_fake: 0.5000884085893631
+  inference_source: null
+  judgment: Probe only.
+artifacts: {}

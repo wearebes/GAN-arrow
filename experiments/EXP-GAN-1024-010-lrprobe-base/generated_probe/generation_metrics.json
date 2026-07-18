@@ -1,0 +1,13 @@
+{
+  "checkpoint": "experiments/EXP-GAN-1024-010-lrprobe-base/best_generator.pt",
+  "generated_count": 16,
+  "output_dir": "experiments/EXP-GAN-1024-010-lrprobe-base/generated_probe",
+  "samples_dir": "experiments/EXP-GAN-1024-010-lrprobe-base/generated_probe/samples",
+  "contact_sheet": "experiments/EXP-GAN-1024-010-lrprobe-base/generated_probe/contact_sheet.png",
+  "config": {
+    "image_size": 1024,
+    "latent_dim": 100,
+    "channels": 3,
+    "generator_features": 48
+  }
+}

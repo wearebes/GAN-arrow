@@ -1,0 +1,47 @@
+{
+  "preprocess_version": "target_roi_v4_exact_training_resolution:min_anchor_fraction=0.0100:crop_expansion=2.9000:min_resolution=1024",
+  "source_count": 109,
+  "accepted_count": 101,
+  "rejected_count": 8,
+  "rejected_counts": {
+    "decode_failed": 0,
+    "missing_target_roi": 0,
+    "below_training_resolution": 0,
+    "insufficient_target_anchor": 8
+  },
+  "rejected_items": [
+    {
+      "path": "dataset/origin_data/IMG_4024.HEIC",
+      "reason": "insufficient_target_anchor"
+    },
+    {
+      "path": "dataset/origin_data/IMG_4035.HEIC",
+      "reason": "insufficient_target_anchor"
+    },
+    {
+      "path": "dataset/origin_data/IMG_4046.HEIC",
+      "reason": "insufficient_target_anchor"
+    },
+    {
+      "path": "dataset/origin_data/IMG_4057.HEIC",
+      "reason": "insufficient_target_anchor"
+    },
+    {
+      "path": "dataset/origin_data/IMG_4068.HEIC",
+      "reason": "insufficient_target_anchor"
+    },
+    {
+      "path": "dataset/origin_data/IMG_4079.HEIC",
+      "reason": "insufficient_target_anchor"
+    },
+    {
+      "path": "dataset/origin_data/IMG_4101.HEIC",
+      "reason": "insufficient_target_anchor"
+    },
+    {
+      "path": "dataset/origin_data/IMG_4112.HEIC",
+      "reason": "insufficient_target_anchor"
+    }
+  ],
+  "training_resolution": 1024
+}

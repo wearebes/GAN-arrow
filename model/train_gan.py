@@ -1,12 +1,15 @@
 import argparse
 import copy
 import csv
+import hashlib
 import json
 import math
 import os
+import platform
 import random
 import re
 import subprocess
+import sys
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -29,11 +32,31 @@ import torchvision.utils as vutils
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 
+from model.ada_augment import AdaBcgAugment, AdaController
+
 
 IMAGE_EXTENSIONS = {".heic", ".heif", ".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 PROCESSED_IMAGE_EXTENSION = ".png"
 PREPARED_IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg")
-PREPROCESS_VERSION = "target_roi_v3_lossless_png"
+PATH_CONFIG_FIELDS = {
+    "dataset_dir",
+    "processed_dir",
+    "output_dir",
+    "resume_generator",
+    "resume_discriminator",
+    "resume_ema_generator",
+    "resume_training_state",
+}
+PREPROCESS_VERSION = "target_roi_v5_centered_target_gate"
+HISTORY_METRIC_FIELDS = (
+    "loss_d",
+    "loss_d_total",
+    "loss_d_real",
+    "loss_d_fake",
+    "loss_g",
+    "d_real",
+    "d_fake",
+)
 
 
 def count_images(path: Path) -> int:
@@ -75,22 +98,24 @@ class TrainingConfig:
     g_lr: float = 0.0002
     beta1: float = 0.5
     real_label: float = 0.9
-    fake_label: float = 0.0
-    discriminator_norm: str = "none"
-    discriminator_mode: str = "global"
-    adversarial_loss_mode: str = "bce"
-    generator_mode: str = "upsample"
     generator_features: int = 32
     discriminator_features: int = 32
+    augmentation_mode: str = "none"
     diffaugment: bool = False
     diffaugment_policy: str = "color,translation,cutout"
+    ada_augpipe: str = "bgc"
+    ada_target: float = 0.6
+    ada_interval: int = 4
+    ada_kimg: float = 500.0
+    ada_p_initial: float = 0.0
     ema_decay: float = 0.0
-    target_prior_weight: float = 0.0
     amp: bool = False
     grad_accum_steps: int = 1
     sample_interval: int = 1
     checkpoint_interval: int = 1
-    freeze_discriminator_during_generator_step: bool = True
+    early_stop_patience_evals: int = 0
+    early_stop_min_epochs: int = 0
+    early_stop_min_delta: float = 0.0
     skip_prepare: bool = False
     max_steps: int | None = None
     resume_generator: Path | None = None
@@ -103,12 +128,32 @@ class TrainingConfig:
     workers: int = 0
 
     def __post_init__(self):
+        if self.augmentation_mode not in {"none", "diffaugment", "ada"}:
+            raise ValueError("augmentation_mode must be one of: none, diffaugment, ada")
+        if self.ada_augpipe != "bgc":
+            raise ValueError("Only the paper-backed ADA bgc pipeline is supported")
+        if not 0 <= self.ada_target <= 1:
+            raise ValueError("ada_target must be in [0, 1]")
+        if self.ada_interval < 1:
+            raise ValueError("ada_interval must be at least 1")
+        if self.ada_kimg <= 0:
+            raise ValueError("ada_kimg must be positive")
+        if not 0 <= self.ada_p_initial <= 1:
+            raise ValueError("ada_p_initial must be in [0, 1]")
+        if self.augmentation_mode == "ada" and self.diffaugment:
+            raise ValueError("ADA and legacy DiffAugment cannot be enabled together")
         if self.grad_accum_steps < 1:
             raise ValueError("grad_accum_steps must be at least 1")
         if self.sample_interval < 1:
             raise ValueError("sample_interval must be at least 1")
         if self.checkpoint_interval < 1:
             raise ValueError("checkpoint_interval must be at least 1")
+        if self.early_stop_patience_evals < 0:
+            raise ValueError("early_stop_patience_evals cannot be negative")
+        if self.early_stop_min_epochs < 0:
+            raise ValueError("early_stop_min_epochs cannot be negative")
+        if self.early_stop_min_delta < 0:
+            raise ValueError("early_stop_min_delta cannot be negative")
 
     @classmethod
     def from_dataset_size(cls, dataset_size: int, **overrides):
@@ -122,7 +167,6 @@ class TrainingConfig:
                 epochs=18,
                 image_size=256,
                 processed_dir=Path("dataset/generate_data/processed_256"),
-                discriminator_norm="none",
                 d_lr=0.0001,
                 g_lr=0.0002,
             )
@@ -132,7 +176,6 @@ class TrainingConfig:
                 epochs=12,
                 image_size=256,
                 processed_dir=Path("dataset/generate_data/processed_256"),
-                discriminator_norm="batch",
                 d_lr=0.0002,
                 g_lr=0.0002,
             )
@@ -140,14 +183,62 @@ class TrainingConfig:
         return cls(**defaults)
 
 
-def _norm_layer(norm: str, channels: int):
-    if norm == "batch":
-        return nn.BatchNorm2d(channels)
-    if norm == "instance":
-        return nn.InstanceNorm2d(channels, affine=True)
-    if norm == "none":
-        return nn.Identity()
-    raise ValueError(f"Unsupported norm: {norm}")
+def load_training_config(path: Path):
+    values = json.loads(Path(path).read_text())
+    for field in PATH_CONFIG_FIELDS:
+        if field in values and values[field] is not None:
+            values[field] = Path(values[field])
+    return TrainingConfig(**values)
+
+
+def _git_output(*args):
+    try:
+        return subprocess.run(
+            ["git", *args],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+
+
+def write_experiment_metadata(run_dir: Path, config: TrainingConfig, device, prepared_paths):
+    config_dict = {key: str(value) if isinstance(value, Path) else value for key, value in asdict(config).items()}
+    (run_dir / "training_config.json").write_text(json.dumps(config_dict, indent=2))
+    environment = {
+        "created_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "python": sys.version,
+        "platform": platform.platform(),
+        "torch": torch.__version__,
+        "device": str(device),
+        "git_commit": _git_output("rev-parse", "HEAD"),
+        "git_status": _git_output("status", "--short"),
+    }
+    (run_dir / "environment.json").write_text(json.dumps(environment, indent=2))
+    preprocessing_report = config.processed_dir / "preprocessing_report.json"
+    if preprocessing_report.exists():
+        (run_dir / "preprocessing_report.json").write_text(preprocessing_report.read_text())
+    with (run_dir / "dataset_manifest.csv").open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["path", "width", "height", "bytes", "sha256"])
+        writer.writeheader()
+        for path in prepared_paths:
+            with Image.open(path) as image:
+                width, height = image.size
+            digest = hashlib.sha256()
+            with path.open("rb") as image_file:
+                for chunk in iter(lambda: image_file.read(1024 * 1024), b""):
+                    digest.update(chunk)
+            writer.writerow(
+                {
+                    "path": str(path),
+                    "width": width,
+                    "height": height,
+                    "bytes": path.stat().st_size,
+                    "sha256": digest.hexdigest(),
+                }
+            )
+    return config_dict
 
 
 def _validate_power_of_two_image_size(image_size: int):
@@ -183,25 +274,11 @@ class UpsampleConvBlock(nn.Module):
         return self.layers(x)
 
 
-class TransposeConvBlock(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, kernel_size=4, stride=2, padding=1):
-        super().__init__()
-        self.layers = nn.Sequential(
-            nn.ConvTranspose2d(in_channels, out_channels, kernel_size, stride, padding, bias=False),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True),
-        )
-
-    def forward(self, x):
-        return self.layers(x)
-
-
 class DownsampleConvBlock(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, norm="none"):
+    def __init__(self, in_channels: int, out_channels: int):
         super().__init__()
         self.layers = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, 4, 2, 1, bias=False),
-            _norm_layer(norm, out_channels),
             nn.LeakyReLU(0.2, inplace=True),
         )
 
@@ -210,42 +287,25 @@ class DownsampleConvBlock(nn.Module):
 
 
 class Generator(nn.Module):
-    def __init__(self, image_size=256, latent_dim=100, channels=3, features=32, mode="upsample"):
+    def __init__(self, image_size=256, latent_dim=100, channels=3, features=32):
         _validate_power_of_two_image_size(image_size)
         super().__init__()
         self.output_size = image_size
         self.latent_dim = latent_dim
-        self.mode = mode
         self.blocks = nn.ModuleList()
-
-        if mode == "upsample":
-            self.project = GeneratorProjectBlock(latent_dim, features * 8)
-            current_channels = features * 8
-            current_size = 4
-            while current_size < image_size:
-                next_channels = max(features, current_channels // 2)
-                self.blocks.append(UpsampleConvBlock(current_channels, next_channels))
-                current_channels = next_channels
-                current_size *= 2
-            self.to_rgb = nn.Sequential(nn.Conv2d(current_channels, channels, 3, 1, 1, bias=False), nn.Tanh())
-        elif mode == "transpose":
-            self.project = TransposeConvBlock(latent_dim, features * 8, kernel_size=4, stride=1, padding=0)
-            current_channels = features * 8
-            current_size = 4
-            while current_size < image_size // 2:
-                next_channels = max(features, current_channels // 2)
-                self.blocks.append(TransposeConvBlock(current_channels, next_channels))
-                current_channels = next_channels
-                current_size *= 2
-            self.to_rgb = nn.Sequential(nn.ConvTranspose2d(current_channels, channels, 4, 2, 1, bias=False), nn.Tanh())
-        else:
-            raise ValueError(f"Unsupported generator mode: {mode}")
+        self.project = GeneratorProjectBlock(latent_dim, features * 8)
+        current_channels = features * 8
+        current_size = 4
+        while current_size < image_size:
+            next_channels = max(features, current_channels // 2)
+            self.blocks.append(UpsampleConvBlock(current_channels, next_channels))
+            current_channels = next_channels
+            current_size *= 2
+        self.to_rgb = nn.Sequential(nn.Conv2d(current_channels, channels, 3, 1, 1, bias=False), nn.Tanh())
 
     def forward(self, x):
-        if self.mode == "upsample" and x.dim() == 4 and x.size(-1) == 1 and x.size(-2) == 1:
+        if x.dim() == 4 and x.size(-1) == 1 and x.size(-2) == 1:
             x = x.view(x.size(0), x.size(1))
-        if self.mode == "transpose" and x.dim() == 2:
-            x = x.view(x.size(0), x.size(1), 1, 1)
         x = self.project(x)
         for block in self.blocks:
             x = block(x)
@@ -253,7 +313,7 @@ class Generator(nn.Module):
 
 
 class Discriminator(nn.Module):
-    def __init__(self, image_size=256, channels=3, features=32, norm="none"):
+    def __init__(self, image_size=256, channels=3, features=32):
         _validate_power_of_two_image_size(image_size)
         super().__init__()
         self.input_size = image_size
@@ -266,7 +326,7 @@ class Discriminator(nn.Module):
         current_size = image_size // 2
         while current_size > 4:
             next_channels = min(features * 8, current_channels * 2)
-            self.blocks.append(DownsampleConvBlock(current_channels, next_channels, norm=norm))
+            self.blocks.append(DownsampleConvBlock(current_channels, next_channels))
             current_channels = next_channels
             current_size //= 2
         self.classifier = nn.Conv2d(current_channels, 1, 4, 1, 0, bias=False)
@@ -278,32 +338,6 @@ class Discriminator(nn.Module):
         return self.classifier(x).view(-1)
 
 
-class PatchDiscriminator(nn.Module):
-    def __init__(self, image_size=256, channels=3, features=32, norm="none"):
-        _validate_power_of_two_image_size(image_size)
-        super().__init__()
-        self.input_size = image_size
-        self.from_rgb = nn.Sequential(
-            nn.Conv2d(channels, features, 4, 2, 1, bias=False),
-            nn.LeakyReLU(0.2, inplace=True),
-        )
-        self.blocks = nn.ModuleList()
-        current_channels = features
-        current_size = image_size // 2
-        while current_size > 16:
-            next_channels = min(features * 8, current_channels * 2)
-            self.blocks.append(DownsampleConvBlock(current_channels, next_channels, norm=norm))
-            current_channels = next_channels
-            current_size //= 2
-        self.patch_head = nn.Conv2d(current_channels, 1, 3, 1, 1, bias=False)
-
-    def forward(self, x):
-        x = self.from_rgb(x)
-        for block in self.blocks:
-            x = block(x)
-        return self.patch_head(x).flatten(1)
-
-
 class ArrowImageDataset(Dataset):
     def __init__(self, image_dir: Path, image_size: int):
         self.paths = prepared_image_paths(image_dir)
@@ -313,7 +347,6 @@ class ArrowImageDataset(Dataset):
             [
                 transforms.Resize(image_size),
                 transforms.CenterCrop(image_size),
-                transforms.RandomHorizontalFlip(p=0.5),
                 transforms.ToTensor(),
                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
             ]
@@ -331,6 +364,11 @@ def image_has_signal(path: Path, min_std=1.0, min_max=16) -> bool:
     with Image.open(path) as image:
         stat = transforms.functional.pil_to_tensor(image.convert("RGB")).float()
     return bool(stat.max().item() >= min_max and stat.std().item() >= min_std)
+
+
+def image_meets_minimum_resolution(path: Path, image_size: int) -> bool:
+    with Image.open(path) as image:
+        return image.width >= image_size and image.height >= image_size
 
 
 def _probe_heic_video_streams(source_path: Path):
@@ -513,11 +551,18 @@ def image_has_target_anchor(path: Path, min_pixels=100, min_fraction=0.01) -> bo
     blue_pixels = int(blue_ring.sum())
     area = array.shape[0] * array.shape[1]
     blue_fraction = blue_pixels / area
+    anchor_y, anchor_x = np.where(anchor)
+    if len(anchor_x) == 0:
+        return False
+    center_offset_x = abs(float(anchor_x.mean()) / array.shape[1] - 0.5)
+    center_offset_y = abs(float(anchor_y.mean()) / array.shape[0] - 0.5)
     return bool(
         anchor_pixels >= min_pixels
         and anchor_pixels / area >= min_fraction
         and blue_pixels >= 50
         and blue_fraction >= 0.003
+        and center_offset_x <= 0.20
+        and center_offset_y <= 0.20
     )
 
 
@@ -549,6 +594,12 @@ def _crop_target_roi_file(path: Path, target_crop_expansion: float = 2.9):
     return True
 
 
+def _resize_prepared_image(path: Path, image_size: int):
+    with Image.open(path) as image:
+        resized = image.convert("RGB").resize((image_size, image_size), Image.Resampling.LANCZOS)
+    resized.save(path, format="PNG")
+
+
 def prepare_images(
     source_dir: Path,
     processed_dir: Path,
@@ -562,7 +613,7 @@ def prepare_images(
     version_path = processed_dir / ".preprocess_version"
     preprocess_version = (
         f"{PREPROCESS_VERSION}:min_anchor_fraction={min_target_anchor_fraction:.4f}:"
-        f"crop_expansion={target_crop_expansion:.4f}"
+        f"crop_expansion={target_crop_expansion:.4f}:min_resolution={image_size}"
     )
     cache_is_current = version_path.exists() and version_path.read_text().strip() == preprocess_version
     prepared_count = 0
@@ -577,8 +628,10 @@ def prepare_images(
     rejected_counts = {
         "decode_failed": 0,
         "missing_target_roi": 0,
+        "below_training_resolution": 0,
         "insufficient_target_anchor": 0,
     }
+    rejected_items = []
     last_decode_error = None
     for source_path in source_paths:
         output_path = processed_dir / f"{source_path.stem}{PROCESSED_IMAGE_EXTENSION}"
@@ -587,6 +640,7 @@ def prepare_images(
             and output_path.exists()
             and output_path.stat().st_mtime >= source_path.stat().st_mtime
             and image_has_signal(output_path)
+            and image_meets_minimum_resolution(output_path, image_size)
             and image_has_target_anchor(output_path, min_fraction=min_target_anchor_fraction)
         ):
             _remove_prepared_cache_for_stem(processed_dir, source_path.stem, keep=output_path)
@@ -599,17 +653,27 @@ def prepare_images(
                 _convert_with_pillow(source_path, output_path)
         except RuntimeError as exc:
             rejected_counts["decode_failed"] += 1
+            rejected_items.append({"path": str(source_path), "reason": "decode_failed"})
             last_decode_error = exc
             output_path.unlink(missing_ok=True)
             _remove_prepared_cache_for_stem(processed_dir, source_path.stem)
             continue
         if not _crop_target_roi_file(output_path, target_crop_expansion=target_crop_expansion):
             rejected_counts["missing_target_roi"] += 1
+            rejected_items.append({"path": str(source_path), "reason": "missing_target_roi"})
             output_path.unlink(missing_ok=True)
             _remove_prepared_cache_for_stem(processed_dir, source_path.stem)
             continue
+        if not image_meets_minimum_resolution(output_path, image_size):
+            rejected_counts["below_training_resolution"] += 1
+            rejected_items.append({"path": str(source_path), "reason": "below_training_resolution"})
+            output_path.unlink(missing_ok=True)
+            _remove_prepared_cache_for_stem(processed_dir, source_path.stem)
+            continue
+        _resize_prepared_image(output_path, image_size)
         if not image_has_target_anchor(output_path, min_fraction=min_target_anchor_fraction):
             rejected_counts["insufficient_target_anchor"] += 1
+            rejected_items.append({"path": str(source_path), "reason": "insufficient_target_anchor"})
             output_path.unlink(missing_ok=True)
             _remove_prepared_cache_for_stem(processed_dir, source_path.stem)
             continue
@@ -618,6 +682,16 @@ def prepare_images(
         _remove_prepared_cache_for_stem(processed_dir, source_path.stem, keep=output_path)
         prepared_count += 1
     version_path.write_text(preprocess_version)
+    preprocessing_report = {
+        "preprocess_version": preprocess_version,
+        "source_count": len(source_paths),
+        "accepted_count": prepared_count,
+        "rejected_count": len(source_paths) - prepared_count,
+        "rejected_counts": rejected_counts,
+        "rejected_items": rejected_items,
+        "training_resolution": image_size,
+    }
+    (processed_dir / "preprocessing_report.json").write_text(json.dumps(preprocessing_report, indent=2))
     if prepared_count == 0 and raise_on_empty:
         details = ", ".join(f"{reason}={count}" for reason, count in rejected_counts.items() if count)
         if not details:
@@ -637,34 +711,26 @@ def prepare_images(
 
 
 def weights_init(module):
-    if isinstance(module, (nn.Conv2d, nn.ConvTranspose2d, nn.Linear)):
+    if isinstance(module, (nn.Conv2d, nn.Linear)):
         nn.init.normal_(module.weight.data, 0.0, 0.02)
-    elif isinstance(module, (nn.BatchNorm2d, nn.InstanceNorm2d)):
+    elif isinstance(module, nn.BatchNorm2d):
         if getattr(module, "weight", None) is not None:
             nn.init.normal_(module.weight.data, 1.0, 0.02)
         if getattr(module, "bias", None) is not None:
             nn.init.constant_(module.bias.data, 0)
 
 
-def adversarial_loss(output, label: float, mode="bce"):
+def adversarial_loss(output, label: float):
     targets = torch.full_like(output, label, dtype=torch.float)
-    if mode == "bce":
-        return nn.functional.binary_cross_entropy_with_logits(output, targets)
-    if mode == "lsgan":
-        return nn.functional.mse_loss(output, targets)
-    raise ValueError(f"Unsupported adversarial loss mode: {mode}")
+    return nn.functional.binary_cross_entropy_with_logits(output, targets)
 
 
 def discriminator_log_loss(loss_real, loss_fake):
     return (loss_real + loss_fake) * 0.5
 
 
-def discriminator_confidence(output, mode="bce"):
-    if mode == "bce":
-        return torch.sigmoid(output).mean().item()
-    if mode == "lsgan":
-        return output.detach().clamp(0.0, 1.0).mean().item()
-    raise ValueError(f"Unsupported adversarial loss mode: {mode}")
+def discriminator_confidence(output):
+    return torch.sigmoid(output).mean().item()
 
 
 def _diffaugment_color(images):
@@ -733,7 +799,35 @@ def diff_augment(images, policy="color,translation,cutout"):
     return images
 
 
-def target_ring_prior_loss(images):
+def resolved_augmentation_mode(config: TrainingConfig):
+    if config.augmentation_mode != "none":
+        return config.augmentation_mode
+    return "diffaugment" if config.diffaugment else "none"
+
+
+def build_ada_controller(config: TrainingConfig):
+    if resolved_augmentation_mode(config) != "ada":
+        return None
+    return AdaController(
+        target=config.ada_target,
+        interval=config.ada_interval,
+        speed_kimg=config.ada_kimg,
+        probability=config.ada_p_initial,
+    )
+
+
+def apply_discriminator_augmentation(images, config: TrainingConfig, ada_pipe, ada_controller):
+    mode = resolved_augmentation_mode(config)
+    if mode == "none":
+        return images
+    if mode == "diffaugment":
+        return diff_augment(images, config.diffaugment_policy)
+    if mode == "ada":
+        return ada_pipe(images, ada_controller.probability)
+    raise ValueError(f"Unsupported augmentation mode: {mode}")
+
+
+def target_structure_error(images):
     images_01 = (images + 1.0) * 0.5
     _, _, height, width = images.shape
     yy, xx = torch.meshgrid(
@@ -761,6 +855,21 @@ def target_ring_prior_loss(images):
     blue_loss = masked_color_loss(blue_mask, [0.10, 0.25, 0.90])
     background_loss = masked_color_loss(background_mask, [0.90, 0.90, 0.86])
     return 2.0 * yellow_loss + 1.5 * red_loss + blue_loss + 0.25 * background_loss
+
+
+def update_early_stopping(current_value, best_value, stale_evaluations, min_delta):
+    improved = current_value < best_value - min_delta
+    if improved:
+        return current_value, 0, True
+    return best_value, stale_evaluations + 1, False
+
+
+def should_stop_early(epoch, stale_evaluations, patience_evaluations, min_epochs):
+    return bool(
+        patience_evaluations > 0
+        and epoch >= min_epochs
+        and stale_evaluations >= patience_evaluations
+    )
 
 
 def create_ema_model(model: nn.Module):
@@ -800,6 +909,8 @@ def save_training_state_checkpoint(
     optimizer_d,
     config,
     completed_steps: int,
+    completed_epoch: int = 0,
+    augmentation_state: dict | None = None,
 ):
     path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(
@@ -811,6 +922,8 @@ def save_training_state_checkpoint(
             "optimizer_d": optimizer_d.state_dict(),
             "config": config,
             "completed_steps": completed_steps,
+            "completed_epoch": completed_epoch,
+            "augmentation_state": augmentation_state,
         },
         path,
     )
@@ -818,6 +931,13 @@ def save_training_state_checkpoint(
 
 def load_training_state_checkpoint(path: Path, map_location="cpu"):
     return torch.load(path, map_location=map_location, weights_only=False)
+
+
+def completed_epoch_from_training_state(training_state, checkpoint_path: Path):
+    if "completed_epoch" in training_state:
+        return int(training_state["completed_epoch"])
+    match = re.search(r"epoch_(\d+)", Path(checkpoint_path).stem)
+    return int(match.group(1)) if match else 0
 
 
 def set_optimizer_lr(optimizer, lr: float):
@@ -845,21 +965,13 @@ def select_device():
     return torch.device("cpu")
 
 
-def loss_axis_label(mode: str):
-    if mode == "bce":
-        return "BCEWithLogits loss"
-    if mode == "lsgan":
-        return "LSGAN MSE loss"
-    raise ValueError(f"Unsupported adversarial loss mode: {mode}")
-
-
-def save_loss_plot(history, output_path: Path, loss_mode: str = "bce"):
+def save_loss_plot(history, output_path: Path):
     plt.figure(figsize=(8, 5))
     plt.plot(history["epoch"], history["loss_d"], label="D loss")
     plt.plot(history["epoch"], history["loss_g"], label="G loss")
     plt.xlabel("Epoch")
-    plt.ylabel(loss_axis_label(loss_mode))
-    plt.title(f"GAN Training Loss ({loss_mode.upper()})")
+    plt.ylabel("BCEWithLogits loss")
+    plt.title("GAN Training Loss")
     plt.grid(True, alpha=0.3)
     plt.legend()
     plt.tight_layout()
@@ -868,22 +980,50 @@ def save_loss_plot(history, output_path: Path, loss_mode: str = "bce"):
 
 
 def save_history_csv(history, output_path: Path):
-    fieldnames = [
-        "epoch",
-        "loss_d",
-        "loss_d_total",
-        "loss_d_real",
-        "loss_d_fake",
-        "loss_g",
-        "d_real",
-        "d_fake",
-    ]
+    fieldnames = ["epoch", *HISTORY_METRIC_FIELDS]
     fieldnames = [field for field in fieldnames if field in history]
     with output_path.open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         for index, epoch in enumerate(history["epoch"]):
             writer.writerow({field: history[field][index] for field in fieldnames})
+
+
+def load_history_csv(input_path: Path, max_epoch: int):
+    history = {
+        "epoch": [],
+        "loss_d": [],
+        "loss_d_total": [],
+        "loss_d_real": [],
+        "loss_d_fake": [],
+        "loss_g": [],
+        "d_real": [],
+        "d_fake": [],
+    }
+    with Path(input_path).open(newline="") as handle:
+        for row in csv.DictReader(handle):
+            epoch = int(row["epoch"])
+            if epoch > max_epoch:
+                continue
+            history["epoch"].append(epoch)
+            for field in history:
+                if field != "epoch":
+                    history[field].append(float(row[field]))
+    return history
+
+
+def trim_training_log(log_path: Path, max_epoch: int):
+    log_path = Path(log_path)
+    if not log_path.exists():
+        log_path.write_text("")
+        return
+    retained_lines = []
+    for line in log_path.read_text().splitlines():
+        match = re.search(r"\bepoch=(\d+)\b", line)
+        if match is None or int(match.group(1)) <= max_epoch:
+            retained_lines.append(line)
+    text = "\n".join(retained_lines)
+    log_path.write_text(text + ("\n" if text else ""))
 
 
 def _tail_average(values, tail: int):
@@ -920,7 +1060,7 @@ def compute_diagnostics(history, tail=5):
     }
 
 
-def train(config: TrainingConfig):
+def train(config: TrainingConfig, on_epoch_end=None):
     random.seed(config.seed)
     torch.manual_seed(config.seed)
     os.environ.setdefault("MPLCONFIGDIR", str(Path(".cache/matplotlib").resolve()))
@@ -949,29 +1089,21 @@ def train(config: TrainingConfig):
     )
 
     device = select_device()
+    augmentation_mode = resolved_augmentation_mode(config)
+    ada_pipe = AdaBcgAugment() if augmentation_mode == "ada" else None
+    ada_controller = build_ada_controller(config)
+    ada_history = []
     generator = Generator(
         image_size=config.image_size,
         latent_dim=config.latent_dim,
         channels=config.channels,
         features=config.generator_features,
-        mode=config.generator_mode,
     ).to(device)
     discriminator = Discriminator(
         image_size=config.image_size,
         channels=config.channels,
         features=config.discriminator_features,
-        norm=config.discriminator_norm,
-    )
-    if config.discriminator_mode == "patch":
-        discriminator = PatchDiscriminator(
-            image_size=config.image_size,
-            channels=config.channels,
-            features=config.discriminator_features,
-            norm=config.discriminator_norm,
-        )
-    elif config.discriminator_mode != "global":
-        raise ValueError(f"Unsupported discriminator mode: {config.discriminator_mode}")
-    discriminator = discriminator.to(device)
+    ).to(device)
     generator.apply(weights_init)
     discriminator.apply(weights_init)
     ema_generator = create_ema_model(generator) if config.ema_decay > 0 else None
@@ -987,6 +1119,8 @@ def train(config: TrainingConfig):
 
     optimizer_d = optim.Adam(discriminator.parameters(), lr=config.d_lr, betas=(config.beta1, 0.999))
     optimizer_g = optim.Adam(generator.parameters(), lr=config.g_lr, betas=(config.beta1, 0.999))
+    resume_completed_epoch = 0
+    resume_completed_steps = 0
     if config.resume_training_state is not None:
         training_state = load_training_state_checkpoint(config.resume_training_state, map_location=device)
         generator.load_state_dict(training_state["generator"])
@@ -997,14 +1131,41 @@ def train(config: TrainingConfig):
         optimizer_d.load_state_dict(training_state["optimizer_d"])
         set_optimizer_lr(optimizer_g, config.g_lr)
         set_optimizer_lr(optimizer_d, config.d_lr)
+        resume_completed_epoch = completed_epoch_from_training_state(
+            training_state,
+            config.resume_training_state,
+        )
+        resume_completed_steps = int(training_state.get("completed_steps", 0))
+        if ada_controller is not None and training_state.get("augmentation_state") is not None:
+            ada_controller = AdaController.from_state_dict(training_state["augmentation_state"])
+        if config.epochs <= resume_completed_epoch:
+            raise ValueError(
+                f"Target epochs ({config.epochs}) must exceed resumed epoch ({resume_completed_epoch})"
+            )
     fixed_noise = torch.randn(16, config.latent_dim, 1, 1, device=device)
     use_amp = should_use_amp(config, device)
     scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
 
-    run_dir = config.output_dir / time.strftime("gan_%Y%m%d_%H%M%S")
+    run_dir = config.output_dir
     run_dir.mkdir(parents=True, exist_ok=True)
-
-    history = {
+    if (run_dir / "metrics.json").exists() and config.resume_training_state is None:
+        raise FileExistsError(f"Completed experiment already exists: {run_dir}")
+    ada_history_path = run_dir / "ada_history.csv"
+    if ada_controller is not None and config.resume_training_state is not None and ada_history_path.exists():
+        with ada_history_path.open(newline="") as handle:
+            for row in csv.DictReader(handle):
+                if int(row["step"]) <= resume_completed_steps:
+                    ada_history.append(
+                        {
+                            "step": int(row["step"]),
+                            "rt": float(row["rt"]),
+                            "p": float(row["p"]),
+                            "observed_images": int(row["observed_images"]),
+                        }
+                    )
+    config_dict = write_experiment_metadata(run_dir, config, device, dataset.paths)
+    training_log_path = run_dir / "training.log"
+    empty_history = {
         "epoch": [],
         "loss_d": [],
         "loss_d_total": [],
@@ -1014,8 +1175,23 @@ def train(config: TrainingConfig):
         "d_real": [],
         "d_fake": [],
     }
-    completed_steps = 0
-    for epoch in range(1, config.epochs + 1):
+    if config.resume_training_state is None:
+        training_log_path.write_text("")
+        history = empty_history
+    else:
+        trim_training_log(training_log_path, resume_completed_epoch)
+        history_path = run_dir / "history.csv"
+        history = (
+            load_history_csv(history_path, resume_completed_epoch)
+            if history_path.exists()
+            else empty_history
+        )
+    quality_history = []
+    best_structure_error = float("inf")
+    stale_quality_evaluations = 0
+    stopped_early = False
+    completed_steps = resume_completed_steps
+    for epoch in range(resume_completed_epoch + 1, config.epochs + 1):
         loss_d_values = []
         loss_d_total_values = []
         loss_d_real_values = []
@@ -1032,49 +1208,58 @@ def train(config: TrainingConfig):
             current_batch = real_images.size(0)
 
             with torch.cuda.amp.autocast(enabled=use_amp):
-                real_for_discriminator = (
-                    diff_augment(real_images, config.diffaugment_policy) if config.diffaugment else real_images
+                real_for_discriminator = apply_discriminator_augmentation(
+                    real_images,
+                    config,
+                    ada_pipe,
+                    ada_controller,
                 )
                 output_real = discriminator(real_for_discriminator)
-                loss_real = adversarial_loss(output_real, config.real_label, config.adversarial_loss_mode)
+                loss_real = adversarial_loss(output_real, config.real_label)
 
                 noise = torch.randn(current_batch, config.latent_dim, 1, 1, device=device)
                 fake_images = generator(noise)
-                fake_for_discriminator = (
-                    diff_augment(fake_images.detach(), config.diffaugment_policy)
-                    if config.diffaugment
-                    else fake_images.detach()
+                fake_for_discriminator = apply_discriminator_augmentation(
+                    fake_images.detach(),
+                    config,
+                    ada_pipe,
+                    ada_controller,
                 )
                 output_fake = discriminator(fake_for_discriminator)
-                loss_fake = adversarial_loss(output_fake, config.fake_label, config.adversarial_loss_mode)
+                loss_fake = adversarial_loss(output_fake, 0.0)
 
                 loss_d = loss_real + loss_fake
                 scaled_loss_d = scale_loss_for_accumulation(loss_d, config.grad_accum_steps)
             scaler.scale(scaled_loss_d).backward()
 
-            if config.freeze_discriminator_during_generator_step:
-                for parameter in discriminator.parameters():
-                    parameter.requires_grad_(False)
+            for parameter in discriminator.parameters():
+                parameter.requires_grad_(False)
             with torch.cuda.amp.autocast(enabled=use_amp):
-                fake_for_generator = diff_augment(fake_images, config.diffaugment_policy) if config.diffaugment else fake_images
+                fake_for_generator = apply_discriminator_augmentation(
+                    fake_images,
+                    config,
+                    ada_pipe,
+                    ada_controller,
+                )
                 output_for_generator = discriminator(fake_for_generator)
-                loss_g = adversarial_loss(output_for_generator, config.real_label, config.adversarial_loss_mode)
-                if config.target_prior_weight > 0:
-                    loss_g = loss_g + config.target_prior_weight * target_ring_prior_loss(fake_images)
+                loss_g = adversarial_loss(output_for_generator, config.real_label)
                 scaled_loss_g = scale_loss_for_accumulation(loss_g, config.grad_accum_steps)
             scaler.scale(scaled_loss_g).backward()
-            if config.freeze_discriminator_during_generator_step:
-                for parameter in discriminator.parameters():
-                    parameter.requires_grad_(True)
+            for parameter in discriminator.parameters():
+                parameter.requires_grad_(True)
 
             loss_d_values.append(discriminator_log_loss(loss_real.detach(), loss_fake.detach()).item())
             loss_d_total_values.append(loss_d.item())
             loss_d_real_values.append(loss_real.item())
             loss_d_fake_values.append(loss_fake.item())
             loss_g_values.append(loss_g.item())
-            d_real_values.append(discriminator_confidence(output_real, config.adversarial_loss_mode))
-            d_fake_values.append(discriminator_confidence(output_fake, config.adversarial_loss_mode))
+            d_real_values.append(discriminator_confidence(output_real))
+            d_fake_values.append(discriminator_confidence(output_fake))
             completed_steps += 1
+            if ada_controller is not None:
+                ada_update = ada_controller.observe(output_real)
+                if ada_update is not None:
+                    ada_history.append({"step": completed_steps, **ada_update})
             accumulated_batches += 1
             reached_accumulation_boundary = accumulated_batches >= config.grad_accum_steps
             reached_epoch_end = batch_index == len(dataloader)
@@ -1100,33 +1285,102 @@ def train(config: TrainingConfig):
         history["d_real"].append(float(sum(d_real_values) / len(d_real_values)))
         history["d_fake"].append(float(sum(d_fake_values) / len(d_fake_values)))
 
+        epoch_sample_path = None
         if should_save_epoch_artifact(epoch, config.epochs, config.sample_interval):
             with torch.no_grad():
                 sample_model = ema_generator if ema_generator is not None else generator
                 sample_model.eval()
                 sample_images = sample_model(fixed_noise).detach().cpu()
-                vutils.save_image(sample_images, run_dir / f"samples_epoch_{epoch:03d}.png", normalize=True, nrow=4)
+                epoch_sample_path = run_dir / f"samples_epoch_{epoch:03d}.png"
+                vutils.save_image(sample_images, epoch_sample_path, normalize=True, nrow=4)
+                if config.early_stop_patience_evals > 0:
+                    structure_error = float(target_structure_error(sample_images).item())
+                    best_structure_error, stale_quality_evaluations, improved = update_early_stopping(
+                        structure_error,
+                        best_structure_error,
+                        stale_quality_evaluations,
+                        config.early_stop_min_delta,
+                    )
+                    quality_history.append(
+                        {
+                            "epoch": epoch,
+                            "target_structure_error": structure_error,
+                            "improved": improved,
+                        }
+                    )
+                    if improved:
+                        torch.save(
+                            {
+                                "state_dict": sample_model.state_dict(),
+                                "config": config_dict,
+                                "uses_ema": ema_generator is not None,
+                                "selection_metric": "fixed_noise_target_structure_error",
+                                "selection_metric_value": structure_error,
+                                "selection_epoch": epoch,
+                            },
+                            run_dir / "best_generator.pt",
+                        )
+                        torch.save(discriminator.state_dict(), run_dir / "best_discriminator.pt")
                 generator.train()
 
         if should_save_epoch_artifact(epoch, config.epochs, config.checkpoint_interval):
-            save_training_state_checkpoint(
+            for checkpoint_path in (
                 run_dir / "training_state_latest.pt",
-                generator=generator,
-                discriminator=discriminator,
-                ema_generator=ema_generator,
-                optimizer_g=optimizer_g,
-                optimizer_d=optimizer_d,
-                config={key: str(value) if isinstance(value, Path) else value for key, value in asdict(config).items()},
-                completed_steps=completed_steps,
-            )
+                run_dir / f"training_state_epoch_{epoch:03d}.pt",
+            ):
+                save_training_state_checkpoint(
+                    checkpoint_path,
+                    generator=generator,
+                    discriminator=discriminator,
+                    ema_generator=ema_generator,
+                    optimizer_g=optimizer_g,
+                    optimizer_d=optimizer_d,
+                    config=config_dict,
+                    completed_steps=completed_steps,
+                    completed_epoch=epoch,
+                    augmentation_state=ada_controller.state_dict() if ada_controller is not None else None,
+                )
 
-        print(
+        epoch_message = (
             f"epoch={epoch:03d} "
             f"loss_d={history['loss_d'][-1]:.4f} "
             f"loss_g={history['loss_g'][-1]:.4f} "
             f"d_real={history['d_real'][-1]:.4f} "
             f"d_fake={history['d_fake'][-1]:.4f}"
         )
+        if ada_controller is not None:
+            epoch_message += (
+                f" ada_p={ada_controller.probability:.6f}"
+                f" ada_rt={ada_controller.last_rt if ada_controller.last_rt is not None else float('nan'):.4f}"
+            )
+        print(epoch_message)
+        with training_log_path.open("a") as handle:
+            handle.write(epoch_message + "\n")
+        save_history_csv(history, run_dir / "history.csv")
+        if on_epoch_end is not None:
+            epoch_event = {
+                "epoch": epoch,
+                "completed_steps": completed_steps,
+                "sample_path": epoch_sample_path,
+                **{field: history[field][-1] for field in HISTORY_METRIC_FIELDS},
+            }
+            if ada_controller is not None:
+                epoch_event["ada_p"] = float(ada_controller.probability)
+                epoch_event["ada_rt"] = ada_controller.last_rt
+            on_epoch_end(epoch_event)
+        if should_stop_early(
+            epoch,
+            stale_quality_evaluations,
+            config.early_stop_patience_evals,
+            config.early_stop_min_epochs,
+        ):
+            stopped_early = True
+            print(
+                f"early_stop epoch={epoch:03d} "
+                f"best_target_structure_error={best_structure_error:.6f} "
+                f"stale_evaluations={stale_quality_evaluations}"
+            )
+            break
         if config.max_steps is not None and completed_steps >= config.max_steps:
             break
 
@@ -1134,15 +1388,28 @@ def train(config: TrainingConfig):
     if ema_generator is not None:
         torch.save(ema_generator.state_dict(), run_dir / "generator_ema.pt")
     torch.save(discriminator.state_dict(), run_dir / "discriminator.pt")
-    best_state_dict = ema_generator.state_dict() if ema_generator is not None else generator.state_dict()
+    final_generator = ema_generator if ema_generator is not None else generator
     torch.save(
         {
-            "state_dict": best_state_dict,
-            "config": {key: str(value) if isinstance(value, Path) else value for key, value in asdict(config).items()},
+            "state_dict": final_generator.state_dict(),
+            "config": config_dict,
             "uses_ema": ema_generator is not None,
+            "selection_metric": "final_training_state",
+            "selection_epoch": history["epoch"][-1],
         },
-        run_dir / "best_generator.pt",
+        run_dir / "final_generator.pt",
     )
+    if config.early_stop_patience_evals <= 0:
+        best_state_dict = ema_generator.state_dict() if ema_generator is not None else generator.state_dict()
+        torch.save(
+            {
+                "state_dict": best_state_dict,
+                "config": config_dict,
+                "uses_ema": ema_generator is not None,
+            },
+            run_dir / "best_generator.pt",
+        )
+        torch.save(discriminator.state_dict(), run_dir / "best_discriminator.pt")
     save_training_state_checkpoint(
         run_dir / "training_state.pt",
         generator=generator,
@@ -1150,11 +1417,18 @@ def train(config: TrainingConfig):
         ema_generator=ema_generator,
         optimizer_g=optimizer_g,
         optimizer_d=optimizer_d,
-        config={key: str(value) if isinstance(value, Path) else value for key, value in asdict(config).items()},
+        config=config_dict,
         completed_steps=completed_steps,
+        completed_epoch=history["epoch"][-1],
+        augmentation_state=ada_controller.state_dict() if ada_controller is not None else None,
     )
-    save_loss_plot(history, run_dir / "loss_curve.png", config.adversarial_loss_mode)
+    save_loss_plot(history, run_dir / "loss_curve.png")
     save_history_csv(history, run_dir / "history.csv")
+    if ada_controller is not None:
+        with ada_history_path.open("w", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=["step", "rt", "p", "observed_images"])
+            writer.writeheader()
+            writer.writerows(ada_history)
 
     diagnostics = compute_diagnostics(history)
     final_loss_d = history["loss_d"][-1]
@@ -1165,8 +1439,18 @@ def train(config: TrainingConfig):
         "dataset_size": dataset_size,
         "prepared_count": prepared_count,
         "completed_steps": completed_steps,
+        "stopped_early": stopped_early,
+        "completed_epochs": history["epoch"][-1],
         "device": str(device),
         "config": {key: str(value) if isinstance(value, Path) else value for key, value in asdict(config).items()},
+        "augmentation": {
+            "mode": augmentation_mode,
+            "pipeline": config.ada_augpipe if augmentation_mode == "ada" else config.diffaugment_policy if augmentation_mode == "diffaugment" else None,
+            "ada_target": config.ada_target if ada_controller is not None else None,
+            "ada_final_p": ada_controller.probability if ada_controller is not None else None,
+            "ada_last_rt": ada_controller.last_rt if ada_controller is not None else None,
+            "ada_updates": len(ada_history) if ada_controller is not None else 0,
+        },
         "parameter_counts": {
             "generator": count_trainable_parameters(generator),
             "discriminator": count_trainable_parameters(discriminator),
@@ -1184,15 +1468,26 @@ def train(config: TrainingConfig):
             "stability_judgment": diagnostics["stability_judgment"],
         },
         "diagnostics": diagnostics,
+        "early_stopping": {
+            "enabled": config.early_stop_patience_evals > 0,
+            "monitor": "fixed_noise_target_structure_error",
+            "best_value": best_structure_error if quality_history else None,
+            "stale_evaluations": stale_quality_evaluations,
+            "evaluations": quality_history,
+        },
         "artifacts": {
             "run_dir": str(run_dir),
             "best_generator": str(run_dir / "best_generator.pt"),
+            "final_generator": str(run_dir / "final_generator.pt"),
+            "best_discriminator": str(run_dir / "best_discriminator.pt"),
             "generator_ema": str(run_dir / "generator_ema.pt") if ema_generator is not None else None,
             "training_state": str(run_dir / "training_state.pt"),
             "training_state_latest": str(run_dir / "training_state_latest.pt"),
             "loss_curve": str(run_dir / "loss_curve.png"),
             "history_csv": str(run_dir / "history.csv"),
+            "ada_history_csv": str(run_dir / "ada_history.csv") if ada_controller is not None else None,
             "last_samples": str(run_dir / f"samples_epoch_{history['epoch'][-1]:03d}.png"),
+            "checkpoint_candidates": sorted(str(path) for path in run_dir.glob("training_state_epoch_*.pt")),
         },
     }
     with (run_dir / "metrics.json").open("w") as handle:
@@ -1203,6 +1498,7 @@ def train(config: TrainingConfig):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Train a small-data DCGAN on arrow HEIC images.")
+    parser.add_argument("--config", type=Path, default=None)
     parser.add_argument("--dataset-dir", type=Path, default=Path("dataset/origin_data"))
     parser.add_argument("--processed-dir", type=Path, default=Path("dataset/generate_data/processed_256"))
     parser.add_argument("--output-dir", type=Path, default=Path("outputs"))
@@ -1211,21 +1507,24 @@ def parse_args():
     parser.add_argument("--image-size", type=int, default=256)
     parser.add_argument("--d-lr", type=float, default=None)
     parser.add_argument("--g-lr", type=float, default=None)
-    parser.add_argument("--discriminator-norm", choices=["none", "instance", "batch"], default=None)
-    parser.add_argument("--discriminator-mode", choices=["global", "patch"], default=None)
-    parser.add_argument("--adversarial-loss-mode", choices=["bce", "lsgan"], default=None)
     parser.add_argument("--generator-features", type=int, default=None)
     parser.add_argument("--discriminator-features", type=int, default=None)
-    parser.add_argument("--generator-mode", choices=["upsample", "transpose"], default=None)
+    parser.add_argument("--augmentation-mode", choices=["none", "diffaugment", "ada"], default=None)
     parser.add_argument("--diffaugment", action="store_true")
     parser.add_argument("--diffaugment-policy", default=None)
+    parser.add_argument("--ada-augpipe", choices=["bgc"], default=None)
+    parser.add_argument("--ada-target", type=float, default=None)
+    parser.add_argument("--ada-interval", type=int, default=None)
+    parser.add_argument("--ada-kimg", type=float, default=None)
+    parser.add_argument("--ada-p-initial", type=float, default=None)
     parser.add_argument("--ema-decay", type=float, default=None)
-    parser.add_argument("--target-prior-weight", type=float, default=None)
     parser.add_argument("--amp", action="store_true")
     parser.add_argument("--grad-accum-steps", type=int, default=None)
     parser.add_argument("--sample-interval", type=int, default=None)
     parser.add_argument("--checkpoint-interval", type=int, default=None)
-    parser.add_argument("--no-freeze-discriminator-during-generator-step", action="store_true")
+    parser.add_argument("--early-stop-patience-evals", type=int, default=None)
+    parser.add_argument("--early-stop-min-epochs", type=int, default=None)
+    parser.add_argument("--early-stop-min-delta", type=float, default=None)
     parser.add_argument("--skip-prepare", action="store_true")
     parser.add_argument("--max-steps", type=int, default=None)
     parser.add_argument("--resume-generator", type=Path, default=None)
@@ -1241,6 +1540,11 @@ def parse_args():
 
 def main():
     args = parse_args()
+    if args.config is not None:
+        config = load_training_config(args.config)
+        metrics = train(config)
+        print(json.dumps(metrics, indent=2))
+        return
     dataset_size = count_images(args.dataset_dir)
     overrides = {
         "dataset_dir": args.dataset_dir,
@@ -1257,26 +1561,28 @@ def main():
         overrides["d_lr"] = args.d_lr
     if args.g_lr is not None:
         overrides["g_lr"] = args.g_lr
-    if args.discriminator_norm is not None:
-        overrides["discriminator_norm"] = args.discriminator_norm
-    if args.discriminator_mode is not None:
-        overrides["discriminator_mode"] = args.discriminator_mode
-    if args.adversarial_loss_mode is not None:
-        overrides["adversarial_loss_mode"] = args.adversarial_loss_mode
     if args.generator_features is not None:
         overrides["generator_features"] = args.generator_features
     if args.discriminator_features is not None:
         overrides["discriminator_features"] = args.discriminator_features
-    if args.generator_mode is not None:
-        overrides["generator_mode"] = args.generator_mode
+    if args.augmentation_mode is not None:
+        overrides["augmentation_mode"] = args.augmentation_mode
     if args.diffaugment:
         overrides["diffaugment"] = True
     if args.diffaugment_policy is not None:
         overrides["diffaugment_policy"] = args.diffaugment_policy
+    if args.ada_augpipe is not None:
+        overrides["ada_augpipe"] = args.ada_augpipe
+    if args.ada_target is not None:
+        overrides["ada_target"] = args.ada_target
+    if args.ada_interval is not None:
+        overrides["ada_interval"] = args.ada_interval
+    if args.ada_kimg is not None:
+        overrides["ada_kimg"] = args.ada_kimg
+    if args.ada_p_initial is not None:
+        overrides["ada_p_initial"] = args.ada_p_initial
     if args.ema_decay is not None:
         overrides["ema_decay"] = args.ema_decay
-    if args.target_prior_weight is not None:
-        overrides["target_prior_weight"] = args.target_prior_weight
     if args.amp:
         overrides["amp"] = True
     if args.grad_accum_steps is not None:
@@ -1285,8 +1591,12 @@ def main():
         overrides["sample_interval"] = args.sample_interval
     if args.checkpoint_interval is not None:
         overrides["checkpoint_interval"] = args.checkpoint_interval
-    if args.no_freeze_discriminator_during_generator_step:
-        overrides["freeze_discriminator_during_generator_step"] = False
+    if args.early_stop_patience_evals is not None:
+        overrides["early_stop_patience_evals"] = args.early_stop_patience_evals
+    if args.early_stop_min_epochs is not None:
+        overrides["early_stop_min_epochs"] = args.early_stop_min_epochs
+    if args.early_stop_min_delta is not None:
+        overrides["early_stop_min_delta"] = args.early_stop_min_delta
     if args.skip_prepare:
         overrides["skip_prepare"] = True
     if args.max_steps is not None:

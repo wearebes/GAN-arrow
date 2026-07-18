@@ -1,12 +1,13 @@
 import unittest
+import csv
+import json
 import shutil
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
 
 import torch.nn as nn
 import torch
-import yaml
+import torchvision.transforms as transforms
 
 from PIL import Image
 import numpy as np
@@ -15,28 +16,116 @@ from model.train_gan import (
     ArrowImageDataset,
     Discriminator,
     Generator,
-    PatchDiscriminator,
     TrainingConfig,
-    adversarial_loss,
     compute_diagnostics,
+    completed_epoch_from_training_state,
     count_images,
     diff_augment,
     discriminator_log_loss,
     image_has_signal,
+    image_meets_minimum_resolution,
+    load_history_csv,
+    load_training_config,
     load_state_dict_from_checkpoint,
-    loss_axis_label,
     prepare_images,
     prepared_image_paths,
     scale_loss_for_accumulation,
     should_save_epoch_artifact,
+    should_stop_early,
     should_use_amp,
-    target_ring_prior_loss,
+    target_structure_error,
     train,
+    trim_training_log,
+    update_early_stopping,
     weights_init,
 )
+from model.ada_augment import AdaBcgAugment, AdaController
 
 
 class GanTrainingConfigTests(unittest.TestCase):
+    def test_prepare_v1_dataset_keeps_capture_groups_and_writes_one_png_per_source(self):
+        from model.prepare_v1_dataset import prepare_v1_dataset
+
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source_dir = root / "origin"
+            staging_dir = root / "staging"
+            output_dir = root / "v1_1024"
+            source_dir.mkdir()
+            staging_dir.mkdir()
+            yy, xx = np.indices((64, 64))
+            radius = np.sqrt((xx - 32) ** 2 + (yy - 32) ** 2)
+            for index in range(15):
+                name = f"IMG_{4000 + index}"
+                image = np.full((64, 64, 3), 245, dtype=np.uint8)
+                image[radius < 25] = (30, 80, 190)
+                image[radius < 17] = (230, 30, 30)
+                image[radius < 8] = (245, 210, 25)
+                Image.fromarray(image).save(source_dir / f"{name}.png")
+                Image.fromarray(image).save(staging_dir / f"{name}.png")
+
+            report = prepare_v1_dataset(
+                source_dir,
+                output_dir,
+                image_size=64,
+                test_count=5,
+                val_count=5,
+                capture_group_size=5,
+                prepared_staging=staging_dir,
+            )
+
+            self.assertEqual(report["split_counts"], {"train": 5, "val": 5, "test": 5})
+            self.assertTrue(report["validation"]["passed"])
+            self.assertEqual(sum(1 for split in ("train", "val", "test") for _ in (output_dir / split).glob("*.png")), 15)
+            with (output_dir / "manifest.csv").open() as handle:
+                rows = list(csv.DictReader(handle))
+            group_splits = {}
+            for row in rows:
+                group_splits.setdefault(row["capture_group"], set()).add(row["split"])
+            self.assertTrue(all(len(splits) == 1 for splits in group_splits.values()))
+
+    def test_offline_augmentation_is_separate_and_traceable(self):
+        from model.augment_dataset import augment_dataset
+
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            input_dir = root / "original"
+            output_dir = root / "augmented"
+            input_dir.mkdir()
+            source_path = input_dir / "source.png"
+            Image.new("RGB", (64, 64), (120, 80, 40)).save(source_path)
+            source_before = source_path.read_bytes()
+
+            summary = augment_dataset(input_dir, output_dir, seed=42)
+
+            self.assertEqual(summary["source_count"], 1)
+            self.assertEqual(summary["output_count"], 5)
+            self.assertEqual(len(list(output_dir.glob("*.png"))), 5)
+            self.assertTrue((output_dir / "_review" / "preview.png").exists())
+            self.assertEqual(source_path.read_bytes(), source_before)
+            self.assertTrue((output_dir / "augmentation_manifest.csv").exists())
+            self.assertTrue((output_dir / "preprocessing_report.json").exists())
+
+    def test_json_config_keeps_experiment_output_together(self):
+        with TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "output_dir": "experiments/EXP-GAN-1024-001-base",
+                        "image_size": 1024,
+                        "generator_features": 48,
+                        "discriminator_features": 16,
+                        "seed": 42,
+                    }
+                )
+            )
+
+            config = load_training_config(config_path)
+
+            self.assertEqual(config.output_dir, Path("experiments/EXP-GAN-1024-001-base"))
+            self.assertEqual(config.seed, 42)
+
     def test_count_images_includes_heic_files(self):
         dataset_dir = Path("dataset/origin_data")
 
@@ -44,12 +133,11 @@ class GanTrainingConfigTests(unittest.TestCase):
 
     def test_small_dataset_defaults_avoid_discriminator_batchnorm(self):
         config = TrainingConfig.from_dataset_size(109)
-        discriminator = Discriminator(image_size=config.image_size, norm=config.discriminator_norm)
+        discriminator = Discriminator(image_size=config.image_size)
 
         self.assertEqual(config.batch_size, 16)
         self.assertEqual(config.image_size, 256)
         self.assertEqual(config.processed_dir, Path("dataset/generate_data/processed_256"))
-        self.assertEqual(config.discriminator_norm, "none")
         self.assertEqual(config.real_label, 0.9)
         self.assertEqual(config.d_lr, 0.0001)
         self.assertEqual(config.g_lr, 0.0002)
@@ -58,19 +146,29 @@ class GanTrainingConfigTests(unittest.TestCase):
     def test_generator_and_discriminator_support_256_images(self):
         config = TrainingConfig.from_dataset_size(109)
         generator = Generator(image_size=config.image_size, latent_dim=config.latent_dim, channels=config.channels)
-        discriminator = Discriminator(image_size=config.image_size, channels=config.channels, norm=config.discriminator_norm)
+        discriminator = Discriminator(image_size=config.image_size, channels=config.channels)
 
         self.assertEqual(generator.output_size, 256)
         self.assertEqual(discriminator.input_size, 256)
 
     def test_256_large_global_model_exceeds_ten_million_parameters(self):
-        generator = Generator(image_size=256, latent_dim=100, channels=3, features=64, mode="upsample")
-        discriminator = Discriminator(image_size=256, channels=3, features=64, norm="none")
+        generator = Generator(image_size=256, latent_dim=100, channels=3, features=64)
+        discriminator = Discriminator(image_size=256, channels=3, features=64)
 
         total_parameters = sum(parameter.numel() for parameter in generator.parameters())
         total_parameters += sum(parameter.numel() for parameter in discriminator.parameters())
 
         self.assertGreaterEqual(total_parameters, 10_000_000)
+
+    def test_1024_compact_model_stays_within_parameter_budget(self):
+        generator = Generator(image_size=1024, latent_dim=100, channels=3, features=48)
+        discriminator = Discriminator(image_size=1024, channels=3, features=16)
+
+        generator_parameters = sum(parameter.numel() for parameter in generator.parameters())
+        total_parameters = generator_parameters + sum(parameter.numel() for parameter in discriminator.parameters())
+
+        self.assertLess(generator_parameters, 2_000_000)
+        self.assertLess(total_parameters, 3_000_000)
 
     def test_training_config_can_enable_diffaugment_and_ema(self):
         config = TrainingConfig.from_dataset_size(
@@ -87,6 +185,27 @@ class GanTrainingConfigTests(unittest.TestCase):
         self.assertTrue(config.skip_prepare)
         self.assertEqual(config.max_steps, 1)
 
+    def test_training_config_can_select_paper_default_ada(self):
+        config = TrainingConfig.from_dataset_size(
+            109,
+            augmentation_mode="ada",
+            ada_augpipe="bgc",
+            ada_target=0.6,
+        )
+
+        self.assertEqual(config.augmentation_mode, "ada")
+        self.assertEqual(config.ada_augpipe, "bgc")
+        self.assertEqual(config.ada_interval, 4)
+        self.assertEqual(config.ada_kimg, 500.0)
+
+    def test_dataset_has_no_real_only_random_flip(self):
+        with TemporaryDirectory() as temp_dir:
+            image_dir = Path(temp_dir)
+            Image.new("RGB", (64, 64), "white").save(image_dir / "sample.png")
+            dataset = ArrowImageDataset(image_dir, 64)
+
+            self.assertFalse(any(isinstance(item, transforms.RandomHorizontalFlip) for item in dataset.transform.transforms))
+
     def test_512_training_config_can_enable_memory_controls(self):
         config = TrainingConfig.from_dataset_size(
             109,
@@ -99,7 +218,6 @@ class GanTrainingConfigTests(unittest.TestCase):
             grad_accum_steps=4,
             sample_interval=25,
             checkpoint_interval=25,
-            freeze_discriminator_during_generator_step=True,
         )
 
         self.assertEqual(config.image_size, 512)
@@ -111,7 +229,6 @@ class GanTrainingConfigTests(unittest.TestCase):
         self.assertEqual(config.grad_accum_steps, 4)
         self.assertEqual(config.sample_interval, 25)
         self.assertEqual(config.checkpoint_interval, 25)
-        self.assertTrue(config.freeze_discriminator_during_generator_step)
 
     def test_amp_only_enables_on_cuda(self):
         config = TrainingConfig.from_dataset_size(109, amp=True)
@@ -131,6 +248,18 @@ class GanTrainingConfigTests(unittest.TestCase):
         self.assertTrue(should_save_epoch_artifact(epoch=25, total_epochs=100, interval=25))
         self.assertTrue(should_save_epoch_artifact(epoch=100, total_epochs=100, interval=25))
 
+    def test_early_stopping_requires_minimum_epochs_and_patience(self):
+        best, stale, improved = update_early_stopping(0.9, 1.0, 3, min_delta=0.01)
+        self.assertTrue(improved)
+        self.assertEqual(best, 0.9)
+        self.assertEqual(stale, 0)
+
+        best, stale, improved = update_early_stopping(0.895, best, stale, min_delta=0.01)
+        self.assertFalse(improved)
+        self.assertEqual(stale, 1)
+        self.assertFalse(should_stop_early(799, 8, patience_evaluations=8, min_epochs=800))
+        self.assertTrue(should_stop_early(800, 8, patience_evaluations=8, min_epochs=800))
+
     def test_diffaugment_preserves_image_shape_and_gradients(self):
         images = torch.randn(2, 3, 256, 256, requires_grad=True)
 
@@ -139,6 +268,29 @@ class GanTrainingConfigTests(unittest.TestCase):
 
         self.assertEqual(tuple(augmented.shape), (2, 3, 256, 256))
         self.assertIsNotNone(images.grad)
+
+    def test_ada_bgc_is_identity_at_zero_and_differentiable_when_enabled(self):
+        pipe = AdaBcgAugment()
+        images = torch.randn(2, 3, 64, 64, requires_grad=True)
+
+        unchanged = pipe(images, 0.0)
+        augmented = pipe(images, 1.0)
+        augmented.mean().backward()
+
+        self.assertTrue(torch.equal(unchanged, images))
+        self.assertEqual(tuple(augmented.shape), (2, 3, 64, 64))
+        self.assertIsNotNone(images.grad)
+
+    def test_ada_controller_uses_real_logit_sign_target(self):
+        controller = AdaController(target=0.6, interval=2, speed_kimg=1.0)
+
+        self.assertIsNone(controller.observe(torch.ones(2)))
+        update = controller.observe(torch.ones(2))
+
+        self.assertAlmostEqual(update["rt"], 1.0)
+        self.assertAlmostEqual(update["p"], 0.004)
+        restored = AdaController.from_state_dict(controller.state_dict())
+        self.assertAlmostEqual(restored.probability, controller.probability)
 
     def test_target_ring_prior_prefers_centered_colored_rings(self):
         yy, xx = torch.meshgrid(torch.arange(256), torch.arange(256), indexing="ij")
@@ -150,10 +302,10 @@ class GanTrainingConfigTests(unittest.TestCase):
         target = target * 2 - 1
         noise = torch.zeros_like(target)
 
-        self.assertLess(target_ring_prior_loss(target).item(), target_ring_prior_loss(noise).item())
+        self.assertLess(target_structure_error(target).item(), target_structure_error(noise).item())
 
     def test_generator_uses_named_standard_blocks(self):
-        generator = Generator(image_size=256, latent_dim=100, channels=3, features=16, mode="upsample")
+        generator = Generator(image_size=256, latent_dim=100, channels=3, features=16)
 
         self.assertIsInstance(generator.blocks, nn.ModuleList)
         self.assertTrue(hasattr(generator, "project"))
@@ -161,36 +313,18 @@ class GanTrainingConfigTests(unittest.TestCase):
         self.assertGreater(len(generator.blocks), 0)
 
     def test_weights_init_handles_named_model_blocks(self):
-        generator = Generator(image_size=256, latent_dim=100, channels=3, features=16, mode="upsample")
+        generator = Generator(image_size=256, latent_dim=100, channels=3, features=16)
 
         generator.apply(weights_init)
 
         self.assertEqual(generator.output_size, 256)
 
     def test_discriminators_use_named_standard_blocks(self):
-        global_discriminator = Discriminator(image_size=256, channels=3, features=16, norm="none")
-        patch_discriminator = PatchDiscriminator(image_size=256, channels=3, features=16, norm="none")
+        discriminator = Discriminator(image_size=256, channels=3, features=16)
 
-        self.assertIsInstance(global_discriminator.blocks, nn.ModuleList)
-        self.assertTrue(hasattr(global_discriminator, "from_rgb"))
-        self.assertTrue(hasattr(global_discriminator, "classifier"))
-        self.assertIsInstance(patch_discriminator.blocks, nn.ModuleList)
-        self.assertTrue(hasattr(patch_discriminator, "patch_head"))
-
-    def test_patch_discriminator_outputs_multiple_local_scores(self):
-        discriminator = PatchDiscriminator(image_size=256, channels=3, features=16, norm="none")
-
-        output = discriminator(torch.randn(2, 3, 256, 256))
-
-        self.assertEqual(output.shape[0], 2)
-        self.assertGreater(output.shape[1], 1)
-
-    def test_lsgan_loss_targets_match_patch_output_shape(self):
-        output = torch.zeros(2, 16)
-
-        loss = adversarial_loss(output, 0.9, mode="lsgan")
-
-        self.assertGreater(loss.item(), 0)
+        self.assertIsInstance(discriminator.blocks, nn.ModuleList)
+        self.assertTrue(hasattr(discriminator, "from_rgb"))
+        self.assertTrue(hasattr(discriminator, "classifier"))
 
     def test_default_generator_uses_upsample_not_transposed_conv(self):
         config = TrainingConfig.from_dataset_size(109)
@@ -198,10 +332,8 @@ class GanTrainingConfigTests(unittest.TestCase):
             image_size=config.image_size,
             latent_dim=config.latent_dim,
             channels=config.channels,
-            mode=config.generator_mode,
         )
 
-        self.assertEqual(config.generator_mode, "upsample")
         self.assertFalse(any(isinstance(module, nn.ConvTranspose2d) for module in generator.modules()))
 
     def test_upsample_generator_accepts_training_noise_shape(self):
@@ -210,25 +342,11 @@ class GanTrainingConfigTests(unittest.TestCase):
             image_size=config.image_size,
             latent_dim=config.latent_dim,
             channels=config.channels,
-            mode=config.generator_mode,
         )
 
         output = generator(torch.randn(2, config.latent_dim, 1, 1))
 
         self.assertEqual(tuple(output.shape), (2, 3, 256, 256))
-
-    def test_transpose_generator_accepts_training_noise_shape(self):
-        config = TrainingConfig.from_dataset_size(109)
-        generator = Generator(
-            image_size=128,
-            latent_dim=config.latent_dim,
-            channels=config.channels,
-            mode="transpose",
-        )
-
-        output = generator(torch.randn(2, config.latent_dim, 1, 1))
-
-        self.assertEqual(tuple(output.shape), (2, 3, 128, 128))
 
     def test_tail_diagnostics_detects_discriminator_too_strong(self):
         diagnostics = compute_diagnostics(
@@ -252,10 +370,6 @@ class GanTrainingConfigTests(unittest.TestCase):
 
         self.assertAlmostEqual(logged_loss.item(), 0.4)
 
-    def test_lsgan_loss_plot_label_does_not_claim_bce(self):
-        self.assertEqual(loss_axis_label("lsgan"), "LSGAN MSE loss")
-        self.assertEqual(loss_axis_label("bce"), "BCEWithLogits loss")
-
     def test_prepare_images_writes_non_black_lossless_256_cache(self):
         with TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir) / "processed_256"
@@ -264,8 +378,11 @@ class GanTrainingConfigTests(unittest.TestCase):
 
             self.assertTrue(image_has_signal(cached))
             with Image.open(cached) as image:
-                self.assertGreaterEqual(max(image.size), 256)
+                self.assertEqual(image.size, (256, 256))
             self.assertEqual(cached.suffix, ".png")
+            report = json.loads((output_dir / "preprocessing_report.json").read_text())
+            self.assertEqual(report["training_resolution"], 256)
+            self.assertEqual(report["accepted_count"], 1)
 
     def test_prepared_image_paths_prefer_lossless_png_over_stale_jpg(self):
         with TemporaryDirectory() as temp_dir:
@@ -308,6 +425,19 @@ class GanTrainingConfigTests(unittest.TestCase):
 
                 self.assertEqual(prepared_count, 0)
                 self.assertEqual(list(output_dir.glob("*.png")), [])
+
+    def test_prepare_images_rejects_colored_pool_scene_without_target(self):
+        with TemporaryDirectory() as temp_dir:
+            temp_origin = Path(temp_dir) / "origin"
+            temp_origin.mkdir()
+            shutil.copy(Path("dataset/origin_data/IMG_4090.HEIC"), temp_origin / "IMG_4090.HEIC")
+            output_dir = Path(temp_dir) / "processed_target_1024"
+
+            prepared_count = prepare_images(temp_origin, output_dir, 1024)
+
+            self.assertEqual(prepared_count, 0)
+            report = json.loads((output_dir / "preprocessing_report.json").read_text())
+            self.assertEqual(report["rejected_counts"]["insufficient_target_anchor"], 1)
 
     def test_prepare_images_removes_stale_jpg_when_source_is_rejected(self):
         with TemporaryDirectory() as temp_dir:
@@ -406,102 +536,66 @@ class GanTrainingConfigTests(unittest.TestCase):
 
             self.assertGreater(core_fraction, default_fraction * 1.2)
 
-    def test_matrix_runner_loads_yaml_and_writes_summary(self):
-        from model.run_matrix import run_matrix
-
+    def test_resolution_gate_rejects_upsampling_low_resolution_inputs(self):
         with TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            matrix_path = root / "matrix.yaml"
-            output_dir = root / "matrix_outputs"
-            matrix_path.write_text(
-                yaml.safe_dump(
-                    {
-                        "epochs": 18,
-                        "defaults": {
-                            "batch_size": 16,
-                            "generator_features": 16,
-                            "discriminator_features": 16,
-                        },
-                        "experiments": [
-                            {
-                                "name": "normNone_dlr1e-4_glr2e-4",
-                                "discriminator_norm": "none",
-                                "d_lr": 0.0001,
-                                "g_lr": 0.0002,
-                            }
-                        ],
-                    }
-                )
-            )
+            image_path = Path(temp_dir) / "small.png"
+            Image.new("RGB", (640, 896), "white").save(image_path)
 
-            def fake_train(config):
-                self.assertEqual(config.batch_size, 16)
-                self.assertEqual(config.generator_features, 16)
-                self.assertEqual(config.discriminator_features, 16)
-                return {
-                    "final": {"loss_d": 1.0, "loss_g": 0.8},
-                    "diagnostics": {"stability_judgment": "roughly_balanced_short_run"},
-                    "artifacts": {"run_dir": str(config.output_dir / "gan_fake")},
-                }
+            self.assertFalse(image_meets_minimum_resolution(image_path, 1024))
+            self.assertTrue(image_meets_minimum_resolution(image_path, 512))
 
-            with patch("model.run_matrix.train", side_effect=fake_train):
-                summary_path = run_matrix(
-                    matrix_path=matrix_path,
-                    dataset_dir=Path("dataset/origin_data"),
-                    processed_dir=Path("dataset/generate_data/processed_256"),
-                    output_dir=output_dir,
-                )
-
-            summary = summary_path.read_text()
-            self.assertIn("normNone_dlr1e-4_glr2e-4", summary)
-            self.assertIn("roughly_balanced_short_run", summary)
-
-    def test_augmented_generator_writes_samples_and_grid(self):
-        from model.generate_augmented import generate_augmented
-
+    def test_one_step_training_keeps_all_core_artifacts_in_exact_output_dir(self):
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             source_dir = root / "source"
-            output_dir = root / "augmented"
+            processed_dir = root / "processed"
+            output_dir = root / "EXP-SMOKE"
             source_dir.mkdir()
-            Image.new("RGB", (256, 256), (220, 220, 220)).save(source_dir / "sample.jpg")
+            processed_dir.mkdir()
+            Image.new("RGB", (64, 64), "white").save(source_dir / "source.png")
+            Image.new("RGB", (64, 64), (128, 64, 32)).save(processed_dir / "prepared.png")
+            config = TrainingConfig(
+                dataset_dir=source_dir,
+                processed_dir=processed_dir,
+                output_dir=output_dir,
+                image_size=64,
+                latent_dim=8,
+                batch_size=1,
+                epochs=1,
+                generator_features=4,
+                discriminator_features=4,
+                augmentation_mode="ada",
+                ada_interval=1,
+                ada_kimg=1.0,
+                ada_p_initial=0.2,
+                ema_decay=0.9,
+                sample_interval=1,
+                checkpoint_interval=1,
+                skip_prepare=True,
+                max_steps=1,
+                seed=42,
+            )
 
-            metrics = generate_augmented(source_dir, output_dir, count=3, image_size=256, seed=1)
+            metrics = train(config)
 
-            self.assertEqual(metrics["source_count"], 1)
-            self.assertEqual(metrics["generated_count"], 3)
-            self.assertTrue((output_dir / "augmented_grid.png").exists())
-            self.assertEqual(len(list((output_dir / "samples").glob("*.jpg"))), 3)
-
-    def test_procedural_target_generator_writes_clear_256_targets(self):
-        from model.generate_targets import generate_targets
-
-        with TemporaryDirectory() as temp_dir:
-            output_dir = Path(temp_dir) / "targets"
-
-            metrics = generate_targets(output_dir, count=2, image_size=256, seed=1)
-
-            self.assertEqual(metrics["generated_count"], 2)
-            self.assertTrue((output_dir / "target_grid.png").exists())
-            sample = output_dir / "samples" / "target_001.jpg"
-            with Image.open(sample) as image:
-                self.assertEqual(image.size, (256, 256))
-                hsv = np.asarray(image.convert("HSV"))
-            hue = hsv[:, :, 0].astype(np.int16)
-            saturation = hsv[:, :, 1].astype(np.int16)
-            value = hsv[:, :, 2].astype(np.int16)
-            center = np.indices((256, 256))
-            radius = np.sqrt((center[1] - 128) ** 2 + (center[0] - 128) ** 2)
-            strong = (saturation > 70) & (value > 80)
-            yellow = (hue >= 24) & (hue <= 48) & strong & (radius < 42)
-            red = ((hue < 12) | (hue > 242)) & strong & (radius < 70)
-            blue = (hue >= 125) & (hue <= 170) & strong & (radius < 98)
-            dark = (value < 80) & (radius < 120)
-
-            self.assertGreater(yellow.mean(), 0.01)
-            self.assertGreater(red.mean(), 0.02)
-            self.assertGreater(blue.mean(), 0.02)
-            self.assertGreater(dark.mean(), 0.02)
+            self.assertEqual(metrics["artifacts"]["run_dir"], str(output_dir))
+            for name in [
+                "training_config.json",
+                "environment.json",
+                "dataset_manifest.csv",
+                "training.log",
+                "history.csv",
+                "ada_history.csv",
+                "metrics.json",
+                "best_generator.pt",
+                "final_generator.pt",
+                "best_discriminator.pt",
+                "training_state_epoch_001.pt",
+                "samples_epoch_001.png",
+            ]:
+                self.assertTrue((output_dir / name).exists(), name)
+            self.assertEqual(metrics["augmentation"]["mode"], "ada")
+            self.assertEqual(metrics["augmentation"]["ada_updates"], 1)
 
     def test_target_scorer_accepts_synthetic_target_and_rejects_gray_image(self):
         from model.score_target import score_image
@@ -528,7 +622,7 @@ class GanTrainingConfigTests(unittest.TestCase):
             root = Path(temp_dir)
             checkpoint_path = root / "checkpoint.pt"
             output_dir = root / "samples"
-            generator = Generator(image_size=256, latent_dim=100, channels=3, features=4, mode="upsample")
+            generator = Generator(image_size=256, latent_dim=100, channels=3, features=4)
             torch.save(
                 {
                     "state_dict": generator.state_dict(),
@@ -537,7 +631,6 @@ class GanTrainingConfigTests(unittest.TestCase):
                         "latent_dim": 100,
                         "channels": 3,
                         "generator_features": 4,
-                        "generator_mode": "upsample",
                     },
                 },
                 checkpoint_path,
@@ -554,7 +647,7 @@ class GanTrainingConfigTests(unittest.TestCase):
     def test_checkpoint_state_loader_accepts_wrapped_and_plain_state_dicts(self):
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            generator = Generator(image_size=256, latent_dim=100, channels=3, features=4, mode="upsample")
+            generator = Generator(image_size=256, latent_dim=100, channels=3, features=4)
             plain_path = root / "plain.pt"
             wrapped_path = root / "wrapped.pt"
             torch.save(generator.state_dict(), plain_path)
@@ -568,9 +661,9 @@ class GanTrainingConfigTests(unittest.TestCase):
 
         with TemporaryDirectory() as temp_dir:
             checkpoint_path = Path(temp_dir) / "training_state.pt"
-            generator = Generator(image_size=256, latent_dim=100, channels=3, features=4, mode="upsample")
-            discriminator = Discriminator(image_size=256, channels=3, features=4, norm="none")
-            ema_generator = Generator(image_size=256, latent_dim=100, channels=3, features=4, mode="upsample")
+            generator = Generator(image_size=256, latent_dim=100, channels=3, features=4)
+            discriminator = Discriminator(image_size=256, channels=3, features=4)
+            ema_generator = Generator(image_size=256, latent_dim=100, channels=3, features=4)
             optimizer_g = torch.optim.Adam(generator.parameters(), lr=0.0002)
             optimizer_d = torch.optim.Adam(discriminator.parameters(), lr=0.0001)
 
@@ -583,6 +676,7 @@ class GanTrainingConfigTests(unittest.TestCase):
                 optimizer_d=optimizer_d,
                 config={"image_size": 256},
                 completed_steps=12,
+                completed_epoch=3,
             )
             state = load_training_state_checkpoint(checkpoint_path)
 
@@ -592,11 +686,38 @@ class GanTrainingConfigTests(unittest.TestCase):
             self.assertIn("optimizer_g", state)
             self.assertIn("optimizer_d", state)
             self.assertEqual(state["completed_steps"], 12)
+            self.assertEqual(state["completed_epoch"], 3)
+
+    def test_old_training_state_infers_epoch_from_checkpoint_name(self):
+        self.assertEqual(
+            completed_epoch_from_training_state({}, Path("training_state_epoch_020.pt")),
+            20,
+        )
+
+    def test_resume_history_and_log_are_trimmed_to_checkpoint_epoch(self):
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            history_path = root / "history.csv"
+            history_path.write_text(
+                "epoch,loss_d,loss_d_total,loss_d_real,loss_d_fake,loss_g,d_real,d_fake\n"
+                "79,0.3,0.3,0.1,0.2,2.0,0.8,0.1\n"
+                "80,0.4,0.4,0.2,0.2,1.8,0.8,0.2\n"
+                "81,0.5,0.5,0.2,0.3,1.6,0.7,0.3\n"
+            )
+            log_path = root / "training.log"
+            log_path.write_text("epoch=079 loss_d=0.3\nepoch=080 loss_d=0.4\nepoch=081 loss_d=0.5\n")
+
+            history = load_history_csv(history_path, max_epoch=80)
+            trim_training_log(log_path, max_epoch=80)
+
+            self.assertEqual(history["epoch"], [79, 80])
+            self.assertEqual(history["loss_g"], [2.0, 1.8])
+            self.assertEqual(log_path.read_text(), "epoch=079 loss_d=0.3\nepoch=080 loss_d=0.4\n")
 
     def test_optimizer_learning_rate_can_be_overridden_after_resume(self):
         from model.train_gan import set_optimizer_lr
 
-        generator = Generator(image_size=256, latent_dim=100, channels=3, features=4, mode="upsample")
+        generator = Generator(image_size=256, latent_dim=100, channels=3, features=4)
         optimizer = torch.optim.Adam(generator.parameters(), lr=0.0002)
 
         set_optimizer_lr(optimizer, 0.00005)
@@ -604,7 +725,7 @@ class GanTrainingConfigTests(unittest.TestCase):
         self.assertEqual([group["lr"] for group in optimizer.param_groups], [0.00005])
 
     def test_discriminator_probability_summary_handles_real_and_generated_inputs(self):
-        from model.evaluate_discriminator import summarize_probabilities
+        from model.evaluate_discriminator import classify_predictions, summarize_probabilities
 
         real_summary = summarize_probabilities([0.8, 0.9, 0.95], fake_expected=False)
         generated_summary = summarize_probabilities([0.1, 0.2, 0.4], fake_expected=True)
@@ -615,6 +736,26 @@ class GanTrainingConfigTests(unittest.TestCase):
         self.assertEqual(generated_summary["accuracy_at_0_5"], 1.0)
         self.assertEqual(real_summary["count"], 3)
         self.assertEqual(generated_summary["count"], 3)
+        records = classify_predictions(
+            [Path("real_correct.png"), Path("real_incorrect.png")],
+            [0.8, 0.2],
+            expected_label="real",
+        )
+        self.assertTrue(records[0]["correct"])
+        self.assertFalse(records[1]["correct"])
+        self.assertEqual(records[1]["predicted_label"], "fake")
+
+    def test_discriminator_evaluation_reports_balanced_accuracy(self):
+        from model.evaluate_discriminator import summarize_classification
+
+        summary = summarize_classification(
+            {"accuracy_at_0_5": 1.0},
+            {"accuracy_at_0_5": 0.0},
+        )
+
+        self.assertEqual(summary["real_accuracy"], 1.0)
+        self.assertEqual(summary["fake_accuracy"], 0.0)
+        self.assertEqual(summary["balanced_accuracy"], 0.5)
 
 
 if __name__ == "__main__":

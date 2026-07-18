@@ -1,0 +1,13 @@
+{
+  "checkpoint": "experiments/EXP-GAN-1024-001-base/final_generator.pt",
+  "generated_count": 64,
+  "output_dir": "experiments/EXP-GAN-1024-001-base/generated_final",
+  "samples_dir": "experiments/EXP-GAN-1024-001-base/generated_final/samples",
+  "contact_sheet": "experiments/EXP-GAN-1024-001-base/generated_final/contact_sheet.png",
+  "config": {
+    "image_size": 1024,
+    "latent_dim": 100,
+    "channels": 3,
+    "generator_features": 48
+  }
+}

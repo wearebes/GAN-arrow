@@ -1,0 +1,70 @@
+schema_version: 1
+id: EXP-GAN-1024-004-base-long100
+kind: formal
+hypothesis: Shapes may emerge with substantially longer training; resumes 001 from
+  epoch 20 to total epoch 100.
+spec:
+  ada_augpipe: bgc
+  ada_interval: 4
+  ada_kimg: 500.0
+  ada_p_initial: 0.0
+  ada_target: 0.6
+  amp: true
+  augmentation_mode: diffaugment
+  batch_size: 1
+  beta1: 0.5
+  channels: 3
+  checkpoint_interval: 10
+  d_lr: 0.0001
+  dataset_dir: dataset/origin_data
+  diffaugment: true
+  diffaugment_policy: color,translation,cutout
+  discriminator_features: 16
+  early_stop_min_delta: 0.0
+  early_stop_min_epochs: 0
+  early_stop_patience_evals: 0
+  ema_decay: 0.995
+  epochs: 100
+  g_lr: 0.0002
+  generator_features: 48
+  grad_accum_steps: 16
+  image_size: 1024
+  latent_dim: 100
+  max_steps: null
+  min_target_anchor_fraction: 0.01
+  processed_dir: dataset/generate_data/processed_1024_front
+  real_label: 0.9
+  sample_interval: 10
+  seed: 42
+  skip_prepare: true
+  target_crop_expansion: 2.9
+  workers: 0
+tracking:
+  mode: offline
+  project: gan-arrow
+  group: gan-1024
+  swanlab_id: null
+  swanlab_url: null
+  note: migrated run; predates tracking integration
+run:
+  status: completed
+  started_at: null
+  finished_at: 2026-07-15T23:46:46+0800
+  completed_epoch: 100
+  completed_steps: 10100
+  device: mps
+  git_commit: 8b6d1522467ee08c541148df3f2b1e9d2c7565be
+  spec_sha256: 2fbb098bdf51097569df4d6abb1b6c0133260dd05a48889e30093efd1a3edea3
+  error: null
+result:
+  loss_d: 0.331612299131875
+  loss_g: 1.7738088764766655
+  d_real: 0.8317338084377864
+  d_fake: 0.18186150198931447
+  inference_source: final_ema_epoch_100 (best/final/EMA are identical; not an independently
+    validated best)
+  judgment: Longer training replaced mosaics with a coarse target/stand silhouette,
+    but images stay blurry with no scoring rings or arrow shafts. Discriminator balanced
+    accuracy 99.50%; generator struggling. Does not pass the downstream-data quality
+    requirement.
+artifacts: {}

@@ -3,6 +3,9 @@
 .pytest_cache/
 __pycache__/
 *.py[cod]
+# SwanLab local run data
+swanlog/
+cleanup_manifest.json
 # Local datasets and generated image caches
 dataset/origin_data/
 dataset/generate_data/
@@ -11,8 +14,12 @@ dataset/generate_data/
 *.pt
 *.pth
 *.ckpt
+*.safetensors
 *.onnx
 *.h5
+
+# Local SDXL training runs (logs and checkpoints are machine-specific)
+experiments/EXP-SDXL-LORA-001-target-face/outputs/runs/
 
 # Generated media
 *.png

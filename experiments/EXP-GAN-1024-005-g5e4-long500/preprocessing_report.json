@@ -1,0 +1,14 @@
+{
+  "source_processed_dir": "dataset/generate_data/processed_1024_front",
+  "selection_version": "manual_no_target_exclusion_v1",
+  "input_prepared_count": 101,
+  "accepted_count": 100,
+  "excluded_count": 1,
+  "excluded_items": [
+    {
+      "path": "dataset/generate_data/processed_1024_front/IMG_4090.png",
+      "reason": "no_visible_archery_target_confirmed_by_final_discriminator_review"
+    }
+  ],
+  "training_resolution": 1024
+}

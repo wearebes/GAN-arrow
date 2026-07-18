@@ -15,7 +15,6 @@ def _checkpoint_config(checkpoint):
         "latent_dim": int(config.get("latent_dim", 100)),
         "channels": int(config.get("channels", 3)),
         "generator_features": int(config.get("generator_features", config.get("features", 32))),
-        "generator_mode": config.get("generator_mode", "upsample"),
     }
 
 
@@ -34,7 +33,6 @@ def load_generator(checkpoint_path: Path, device=None):
         latent_dim=config["latent_dim"],
         channels=config["channels"],
         features=config["generator_features"],
-        mode=config["generator_mode"],
     ).to(device)
     generator.load_state_dict(_checkpoint_state_dict(checkpoint))
     generator.eval()
